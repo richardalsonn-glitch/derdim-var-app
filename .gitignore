@@ -144,6 +144,7 @@ vite.config.ts.timestamp-*
 
 # Expo local state
 .expo/
+.expo-start*.err
 .expo-start*.log
 .expo-start.pid
 expo-qr.svg
