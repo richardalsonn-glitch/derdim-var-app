@@ -84,4 +84,5 @@ export type AppProfile = {
   plan: MembershipPlan;
   avatarId: string;
   mood: string;
+  email?: string;
 };

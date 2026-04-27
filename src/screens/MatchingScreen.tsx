@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -7,33 +7,57 @@ import { ChoiceChip } from '../components/ChoiceChip';
 import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
+import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { avatarOptions, getAvatarById, roleLabels, topics } from '../data/mockData';
+import { requestMicrophonePermission } from '../services/permissionsService';
 import { AppScreenProps } from '../navigation/types';
 
 export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
   const { activeRole, activeTopic, setActiveTopic, profile } = useAppState();
-  const { remainingSeconds } = useCountdownTimer({ initialSeconds: 7 });
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
   const selfAvatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
+  const { remainingSeconds } = useCountdownTimer({ initialSeconds: 7 });
 
   const partnerAvatar = useMemo(() => {
     const pool = avatarOptions.filter((avatar) => avatar.id !== profile.avatarId);
     return getAvatarById(pool[0]?.id ?? avatarOptions[0].id);
   }, [profile.avatarId]);
 
+  const handleJoin = async () => {
+    const result = await requestMicrophonePermission();
+    if (!result.granted) {
+      setPermissionModalVisible(true);
+      return;
+    }
+
+    navigation.replace('Chat');
+  };
+
   return (
     <PremiumScreen>
-      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Seni anlayacak biri aranıyor" title="Eşleşme" />
+      <ScreenHeader
+        onBack={() => navigation.goBack()}
+        rightAction={
+          <Pressable style={styles.reportPill}>
+            <Text style={styles.reportText}>Şikayet et / Engelle</Text>
+          </Pressable>
+        }
+        subtitle="Seni anlayacak biri aranıyor"
+        title="Eşleşme"
+      />
 
       <GlassCard style={styles.centerCard}>
         <View style={styles.userRow}>
           <Avatar avatar={selfAvatar} size={56} />
           <View style={styles.userCopy}>
             <Text style={styles.userLabel}>Sen</Text>
-            <Text style={styles.userMeta}>{selfAvatar.name} • {roleLabels[activeRole]}</Text>
+            <Text style={styles.userMeta}>
+              {selfAvatar.name} • {roleLabels[activeRole]}
+            </Text>
           </View>
         </View>
 
@@ -60,10 +84,20 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
         </GlassCard>
       </GlassCard>
 
-      <GradientButton icon="call" onPress={() => navigation.replace('Chat')} title="Sesli görüşmeye bağlan" />
+      <GradientButton icon="call" onPress={handleJoin} title="Sesli görüşmeye bağlan" />
       <Pressable onPress={() => navigation.goBack()} style={styles.cancelWrap}>
         <Text style={styles.cancelText}>İptal et</Text>
       </Pressable>
+
+      <NoticeModal
+        actions={[
+          { label: 'Tekrar Dene', onPress: handleJoin },
+          { label: 'Şimdilik Vazgeç', onPress: () => setPermissionModalVisible(false), variant: 'ghost' },
+        ]}
+        message="Sesli görüşme için mikrofon izni gerekli."
+        title="Mikrofon izni gerekli"
+        visible={permissionModalVisible}
+      />
     </PremiumScreen>
   );
 }
@@ -131,6 +165,19 @@ const styles = StyleSheet.create({
     color: colors.muted,
     flex: 1,
     lineHeight: 19,
+  },
+  reportPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  reportText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
   cancelWrap: {
     alignItems: 'center',

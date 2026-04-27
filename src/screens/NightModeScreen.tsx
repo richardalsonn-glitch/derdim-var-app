@@ -1,18 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar } from '../components/Avatar';
 import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
+import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
 import { getAvatarById, nightRoomUsers } from '../data/mockData';
+import { requestMicrophonePermission } from '../services/permissionsService';
 import { AppScreenProps } from '../navigation/types';
 
 export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const glow = useRef(new Animated.Value(0.7)).current;
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -25,6 +28,15 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     animation.start();
     return () => animation.stop();
   }, [glow]);
+
+  const handleWordTake = async () => {
+    const result = await requestMicrophonePermission();
+    if (!result.granted) {
+      setPermissionModalVisible(true);
+      return;
+    }
+    navigation.navigate('Matching');
+  };
 
   return (
     <PremiumScreen>
@@ -57,9 +69,19 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
       </View>
 
       <View style={styles.actions}>
-        <GradientButton icon="mic" onPress={() => navigation.navigate('Matching')} title="Söz Al" />
+        <GradientButton icon="mic" onPress={handleWordTake} title="Söz Al" />
         <GradientButton icon="headset" onPress={() => navigation.navigate('Chat')} title="Dinleyici Olarak Katıl" variant="secondary" />
       </View>
+
+      <NoticeModal
+        actions={[
+          { label: 'Tekrar Dene', onPress: handleWordTake },
+          { label: 'Şimdilik Vazgeç', onPress: () => setPermissionModalVisible(false), variant: 'ghost' },
+        ]}
+        message="Sesli görüşme için mikrofon izni gerekli."
+        title="Mikrofon izni gerekli"
+        visible={permissionModalVisible}
+      />
     </PremiumScreen>
   );
 }

@@ -7,12 +7,16 @@ import { Avatar } from '../components/Avatar';
 import { ChoiceChip } from '../components/ChoiceChip';
 import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
+import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
-import { colors, gradients, radius, spacing, typography } from '../constants/theme';
+import { colors, gradients, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, helpedToday, moodOptions } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { MatchRole } from '../types';
+import { requestMicrophonePermission } from '../services/permissionsService';
+
+// TODO: Moderasyon ve sikayet paneli baglanacak
 
 const quickActions = [
   { label: 'Gece Modu', subtitle: '22:00 - 02:00', icon: 'moon', route: 'NightMode' as const },
@@ -26,12 +30,26 @@ const quickActions = [
 export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   const { profile, setActiveRole, updateProfile } = useAppState();
   const [selectedMood, setSelectedMood] = useState(profile.mood);
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [pendingRole, setPendingRole] = useState<MatchRole | null>(null);
   const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
 
-  const startFlow = (role: MatchRole) => {
+  const proceedToMatching = (role: MatchRole) => {
     setActiveRole(role);
     updateProfile({ mood: selectedMood });
     navigation.navigate('Matching');
+  };
+
+  const startVoiceFlow = async (role: MatchRole) => {
+    setPendingRole(role);
+    const result = await requestMicrophonePermission();
+
+    if (result.granted) {
+      proceedToMatching(role);
+      return;
+    }
+
+    setPermissionModalVisible(true);
   };
 
   return (
@@ -43,7 +61,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
             <View style={styles.identityCopy}>
               <Text style={styles.alias}>{profile.username}</Text>
               <Text style={styles.meta}>
-                {profile.plan.toUpperCase()} plan • {profile.age} yaş
+                {profile.plan.toUpperCase()} plan • {profile.age} yaş • {profile.gender}
               </Text>
             </View>
           </View>
@@ -60,20 +78,20 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
 
         <View style={styles.heroCopy}>
           <Text style={styles.heroTitle}>Anonim kal, içini dök, seni anlayacak biriyle eşleş.</Text>
-          <Text style={styles.heroSubtitle}>Tek elle kullanıma uygun, hızlı ve ses odaklı bir akış tasarlandı.</Text>
+          <Text style={styles.heroSubtitle}>Sosyal destek odaklı sesli dertleşme deneyimi. Terapi hizmeti değildir.</Text>
         </View>
       </GlassCard>
 
       <View style={styles.ctaStack}>
         <GradientButton
           icon="heart"
-          onPress={() => startFlow('derdim-var')}
+          onPress={() => startVoiceFlow('derdim-var')}
           subtitle="Sesli olarak içini dökmek istiyorum"
           title="Derdim Var"
         />
         <GradientButton
           icon="headset"
-          onPress={() => startFlow('derman-olan')}
+          onPress={() => startVoiceFlow('derman-olan')}
           subtitle="Birini dinleyip iyi gelmek istiyorum"
           title="Derman Ol"
           variant="secondary"
@@ -113,6 +131,28 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           ))}
         </View>
       </GlassCard>
+
+      <NoticeModal
+        actions={[
+          {
+            label: 'Tekrar Dene',
+            onPress: async () => {
+              setPermissionModalVisible(false);
+              if (pendingRole) {
+                await startVoiceFlow(pendingRole);
+              }
+            },
+          },
+          {
+            label: 'Şimdilik Vazgeç',
+            onPress: () => setPermissionModalVisible(false),
+            variant: 'ghost',
+          },
+        ]}
+        message="Sesli görüşme için mikrofon izni gerekli."
+        title="Mikrofon izni gerekli"
+        visible={permissionModalVisible}
+      />
     </PremiumScreen>
   );
 }

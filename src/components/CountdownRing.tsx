@@ -13,18 +13,19 @@ type CountdownRingProps = {
 type CountdownOptions = {
   initialSeconds: number;
   onExpire?: () => void;
+  autoStart?: boolean;
 };
 
-export function useCountdownTimer({ initialSeconds, onExpire }: CountdownOptions) {
+export function useCountdownTimer({ initialSeconds, onExpire, autoStart = true }: CountdownOptions) {
   const [remainingSeconds, setRemainingSeconds] = useState(initialSeconds);
-  const [isRunning, setIsRunning] = useState(true);
+  const [isRunning, setIsRunning] = useState(autoStart);
   const expiredRef = useRef(false);
 
   useEffect(() => {
     setRemainingSeconds(initialSeconds);
-    setIsRunning(true);
+    setIsRunning(autoStart);
     expiredRef.current = false;
-  }, [initialSeconds]);
+  }, [initialSeconds, autoStart]);
 
   useEffect(() => {
     if (!isRunning || remainingSeconds <= 0) {
@@ -55,10 +56,10 @@ export function useCountdownTimer({ initialSeconds, onExpire }: CountdownOptions
       setRemainingSeconds((current) => current + value);
       setIsRunning(true);
     },
-    reset: (nextSeconds = initialSeconds) => {
+    reset: (nextSeconds = initialSeconds, shouldRun = autoStart) => {
       expiredRef.current = false;
       setRemainingSeconds(nextSeconds);
-      setIsRunning(true);
+      setIsRunning(shouldRun);
     },
   };
 }

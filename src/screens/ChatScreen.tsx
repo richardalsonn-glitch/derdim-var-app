@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar } from '../components/Avatar';
@@ -7,6 +7,7 @@ import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GlassCard } from '../components/GlassCard';
 import { GiftCelebrationOverlay, GiftModal } from '../components/GiftModal';
 import { GradientButton } from '../components/GradientButton';
+import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, radius, spacing } from '../constants/theme';
@@ -14,6 +15,12 @@ import { useAppState } from '../data/AppContext';
 import { getAvatarById, giftBonusByPlan, guestProfile, planDurations } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { GiftItem } from '../types';
+
+// TODO: Supabase Realtime / WebRTC sesli eslesme baglanacak
+// TODO: RevenueCat / In-App Purchase baglanacak
+// TODO: Moderasyon ve sikayet paneli baglanacak
+
+type CallPhase = 'connecting' | 'connected' | 'ended';
 
 export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
   const { activeRole, activeTopic, profile } = useAppState();
@@ -23,16 +30,29 @@ export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
   const [micEnabled, setMicEnabled] = useState(true);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [expiredVisible, setExpiredVisible] = useState(false);
+  const [safetyVisible, setSafetyVisible] = useState(false);
+  const [callPhase, setCallPhase] = useState<CallPhase>('connecting');
   const partnerAvatar = useMemo(() => getAvatarById(guestProfile.avatarId), []);
   const totalSeconds = planDurations[profile.plan];
   const bonusSeconds = giftBonusByPlan[profile.plan];
   const { remainingSeconds, addSeconds, setIsRunning } = useCountdownTimer({
     initialSeconds: totalSeconds,
+    autoStart: false,
     onExpire: () => {
       setExpiredVisible(true);
       setReviewVisible(true);
+      setCallPhase('ended');
     },
   });
+
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setCallPhase('connected');
+      setIsRunning(true);
+    }, 2000);
+
+    return () => clearTimeout(timerId);
+  }, [setIsRunning]);
 
   const openGiftFlow = () => {
     setGiftVisible(true);
@@ -49,14 +69,24 @@ export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
     }, 5000);
   };
 
-  const endCall = () => {
+  const openReview = () => {
     setIsRunning(false);
     setReviewVisible(true);
+    setCallPhase('ended');
   };
 
   return (
     <PremiumScreen contentStyle={styles.content} scroll={false}>
-      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Anonim sesli görüşme" title="Ses Odası" />
+      <ScreenHeader
+        onBack={() => navigation.goBack()}
+        rightAction={
+          <Pressable onPress={() => setSafetyVisible(true)} style={styles.reportPill}>
+            <Text style={styles.reportText}>Şikayet et / Engelle</Text>
+          </Pressable>
+        }
+        subtitle="Anonim sesli görüşme"
+        title="Ses Odası"
+      />
 
       <View style={styles.body}>
         <GlassCard style={styles.callCard} toned="strong">
@@ -67,20 +97,27 @@ export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
             <View style={styles.topicPill}>
               <Text style={styles.topicText}>{activeTopic}</Text>
             </View>
+            <Text style={[styles.statusText, callPhase === 'connected' && styles.statusConnected]}>
+              {callPhase === 'connecting' ? 'Bağlanıyor...' : callPhase === 'connected' ? 'Bağlandı' : 'Görüşme sonlandı'}
+            </Text>
           </View>
 
           <CountdownRing remainingSeconds={remainingSeconds} size={248} totalSeconds={Math.max(totalSeconds, remainingSeconds)} />
 
           <View style={styles.controls}>
-            <Pressable onPress={() => setMicEnabled((current) => !current)} style={[styles.controlButton, micEnabled && styles.controlActive]}>
+            <Pressable
+              disabled={callPhase !== 'connected'}
+              onPress={() => setMicEnabled((current) => !current)}
+              style={[styles.controlButton, micEnabled && styles.controlActive, callPhase !== 'connected' && styles.disabledControl]}
+            >
               <Ionicons color={colors.text} name={micEnabled ? 'mic' : 'mic-off'} size={22} />
             </Pressable>
 
-            <Pressable onPress={openGiftFlow} style={styles.controlButton}>
+            <Pressable disabled={callPhase !== 'connected'} onPress={openGiftFlow} style={[styles.controlButton, callPhase !== 'connected' && styles.disabledControl]}>
               <Ionicons color={colors.text} name="gift" size={22} />
             </Pressable>
 
-            <Pressable onPress={endCall} style={[styles.controlButton, styles.endButton]}>
+            <Pressable onPress={openReview} style={[styles.controlButton, styles.endButton]}>
               <Ionicons color={colors.text} name="call" size={22} style={styles.endIcon} />
             </Pressable>
           </View>
@@ -100,23 +137,44 @@ export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
             <GradientButton onPress={() => navigation.navigate('Home')} title="Uyum sağlamadı" variant="ghost" />
           </View>
         ) : (
-          <Text style={styles.helperText}>Yazışma yok. Bu alan yalnızca sesli görüşme deneyimi için tasarlandı.</Text>
+          <Text style={styles.helperText}>Bu alan yazışma içermez; yalnızca demo sesli görüşme hissi için tasarlandı.</Text>
         )}
       </View>
 
       <GiftModal onClose={() => setGiftVisible(false)} onSelect={handleGiftSelect} visible={giftVisible} />
       <GiftCelebrationOverlay gift={selectedGift} visible={celebrationVisible} />
 
-      <Modal animationType="fade" transparent visible={expiredVisible}>
-        <View style={styles.modalBackdrop}>
-          <GlassCard style={styles.expiredCard}>
-            <Text style={styles.expiredTitle}>Süre doldu</Text>
-            <Text style={styles.expiredText}>Devam etmek için hediye gönder veya paketini yükselt.</Text>
-            <GradientButton onPress={openGiftFlow} title="Hediye gönder" />
-            <GradientButton onPress={() => navigation.navigate('Packages')} title="Paketi yükselt" variant="gold" />
-          </GlassCard>
-        </View>
-      </Modal>
+      <NoticeModal
+        actions={[
+          { label: 'Hediye gönder', onPress: openGiftFlow },
+          { label: 'Paketi yükselt', onPress: () => navigation.navigate('Packages'), variant: 'gold' },
+        ]}
+        message="Süre doldu. Devam etmek için hediye gönder veya paketini yükselt."
+        title="Süre doldu"
+        visible={expiredVisible}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Bana iyi geldi', onPress: () => navigation.navigate('Home'), variant: 'secondary' },
+          { label: 'Uyum sağlamadı', onPress: () => navigation.navigate('Home'), variant: 'ghost' },
+          { label: 'Şikayet et', onPress: () => navigation.navigate('Home'), variant: 'gold' },
+        ]}
+        message="Bu kişi sana iyi geldi mi?"
+        title="Görüşmeyi değerlendir"
+        visible={reviewVisible}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Şikayet et', onPress: () => navigation.navigate('Home'), variant: 'gold' },
+          { label: 'Engelle', onPress: () => navigation.navigate('Home'), variant: 'secondary' },
+          { label: 'Vazgeç', onPress: () => setSafetyVisible(false), variant: 'ghost' },
+        ]}
+        message="Güvenlik ekibi ileride moderasyon paneliyle desteklenecek. Şimdilik bu akış mock olarak çalışır."
+        title="Güvenlik seçenekleri"
+        visible={safetyVisible}
+      />
     </PremiumScreen>
   );
 }
@@ -163,6 +221,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '700',
   },
+  statusText: {
+    color: colors.goldSoft,
+    fontWeight: '700',
+  },
+  statusConnected: {
+    color: colors.green,
+  },
   controls: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -180,6 +245,9 @@ const styles = StyleSheet.create({
   controlActive: {
     backgroundColor: 'rgba(69, 224, 255, 0.14)',
     borderColor: 'rgba(69, 224, 255, 0.44)',
+  },
+  disabledControl: {
+    opacity: 0.55,
   },
   endButton: {
     backgroundColor: 'rgba(255,124,156,0.18)',
@@ -218,24 +286,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.md,
   },
-  modalBackdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(3, 6, 16, 0.74)',
-    padding: spacing.lg,
+  reportPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  expiredCard: {
-    width: '100%',
-    gap: spacing.md,
-  },
-  expiredTitle: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  expiredText: {
+  reportText: {
     color: colors.muted,
-    lineHeight: 21,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

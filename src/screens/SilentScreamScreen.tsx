@@ -1,20 +1,24 @@
 import { useState } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar } from '../components/Avatar';
 import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
+import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { colors, radius, spacing } from '../constants/theme';
+import { colors, spacing } from '../constants/theme';
 import { getAvatarById, silentListeners } from '../data/mockData';
+import { requestMicrophonePermission } from '../services/permissionsService';
 import { AppScreenProps } from '../navigation/types';
 
 export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'>) {
   const [voteMessage, setVoteMessage] = useState('%30 evet olursa +1 dakika uzar.');
   const [expiredVisible, setExpiredVisible] = useState(false);
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [safetyVisible, setSafetyVisible] = useState(false);
   const { remainingSeconds, addSeconds } = useCountdownTimer({
     initialSeconds: 180,
     onExpire: () => setExpiredVisible(true),
@@ -28,9 +32,28 @@ export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'
     }, 1400);
   };
 
+  const handleMicTake = async () => {
+    const result = await requestMicrophonePermission();
+    if (!result.granted) {
+      setPermissionModalVisible(true);
+      return;
+    }
+
+    navigation.navigate('Chat');
+  };
+
   return (
     <PremiumScreen>
-      <ScreenHeader onBack={() => navigation.goBack()} subtitle="1 anlatıcı • en fazla 10 dinleyici" title="Sessiz Çığlık" />
+      <ScreenHeader
+        onBack={() => navigation.goBack()}
+        rightAction={
+          <Pressable onPress={() => setSafetyVisible(true)} style={styles.reportPill}>
+            <Text style={styles.reportText}>Şikayet et / Engelle</Text>
+          </Pressable>
+        }
+        subtitle="1 anlatıcı • en fazla 10 dinleyici"
+        title="Sessiz Çığlık"
+      />
 
       <GlassCard style={styles.storyCard} toned="strong">
         <Text style={styles.storyTag}>Şu an anlatan kişi</Text>
@@ -72,18 +95,36 @@ export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'
 
       <View style={styles.actions}>
         <GradientButton icon="thumbs-up" onPress={handleExtendVote} title="Süre uzasın" variant="secondary" />
-        <GradientButton icon="mic" onPress={() => navigation.navigate('Chat')} title="Mikrofona geç" />
+        <GradientButton icon="mic" onPress={handleMicTake} title="Mikrofona geç" />
       </View>
 
-      <Modal animationType="fade" transparent visible={expiredVisible}>
-        <View style={styles.modalBackdrop}>
-          <GlassCard style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Süre doldu</Text>
-            <Text style={styles.modalText}>Devam etmek için hediye gönder veya paketini yükselt.</Text>
-            <GradientButton onPress={() => setExpiredVisible(false)} title="Tamam" variant="secondary" />
-          </GlassCard>
-        </View>
-      </Modal>
+      <NoticeModal
+        actions={[{ label: 'Tamam', onPress: () => setExpiredVisible(false), variant: 'secondary' }]}
+        message="Süre doldu. Devam etmek için hediye gönder veya paketini yükselt."
+        title="Süre doldu"
+        visible={expiredVisible}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Tekrar Dene', onPress: handleMicTake },
+          { label: 'Şimdilik Vazgeç', onPress: () => setPermissionModalVisible(false), variant: 'ghost' },
+        ]}
+        message="Sesli görüşme için mikrofon izni gerekli."
+        title="Mikrofon izni gerekli"
+        visible={permissionModalVisible}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Şikayet et', onPress: () => navigation.navigate('Home'), variant: 'gold' },
+          { label: 'Engelle', onPress: () => navigation.navigate('Home'), variant: 'secondary' },
+          { label: 'Vazgeç', onPress: () => setSafetyVisible(false), variant: 'ghost' },
+        ]}
+        message="Bu alan anonim sosyal destek içindir. Moderasyon akışı şimdilik demo modunda çalışır."
+        title="Güvenlik seçenekleri"
+        visible={safetyVisible}
+      />
     </PremiumScreen>
   );
 }
@@ -178,24 +219,17 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.sm,
   },
-  modalBackdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-    backgroundColor: 'rgba(2, 4, 14, 0.72)',
+  reportPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  modalCard: {
-    width: '100%',
-    gap: spacing.md,
-  },
-  modalTitle: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  modalText: {
+  reportText: {
     color: colors.muted,
-    lineHeight: 21,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

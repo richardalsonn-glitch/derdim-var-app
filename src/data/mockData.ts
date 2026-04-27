@@ -249,6 +249,7 @@ export const defaultProfile = {
   plan: 'vip' as const,
   avatarId: 'f-2',
   mood: 'Konuşmak istiyorum',
+  email: 'gizli@derdimvar.app',
 };
 
 export const guestProfile = {

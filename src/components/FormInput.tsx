@@ -9,15 +9,26 @@ type FormInputProps = {
   value?: string;
   secureTextEntry?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  editable?: boolean;
+  onChangeText?: (value: string) => void;
 };
 
-export function FormInput({ label, placeholder, value, secureTextEntry, icon }: FormInputProps) {
+export function FormInput({
+  label,
+  placeholder,
+  value,
+  secureTextEntry,
+  icon,
+  editable = true,
+  onChangeText,
+}: FormInputProps) {
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputWrap}>
+      <View style={[styles.inputWrap, !editable && styles.readOnlyWrap]}>
         <TextInput
-          editable={false}
+          editable={editable}
+          onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={colors.dim}
           secureTextEntry={secureTextEntry}
@@ -48,6 +59,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  readOnlyWrap: {
+    opacity: 0.9,
   },
   input: {
     flex: 1,

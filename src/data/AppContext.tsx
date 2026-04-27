@@ -31,8 +31,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           const next = { ...current, ...patch };
 
           if (!patch.avatarId && patch.gender && getAvatarById(current.avatarId).gender !== patch.gender) {
-            const fallback = patch.gender === 'Kadın' ? 'f-1' : 'm-1';
-            next.avatarId = fallback;
+            next.avatarId = patch.gender === 'Kadın' ? 'f-1' : 'm-1';
           }
 
           return next;
