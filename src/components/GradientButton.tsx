@@ -13,6 +13,7 @@ type GradientButtonProps = {
   variant?: 'primary' | 'secondary' | 'ghost' | 'gold';
   compact?: boolean;
   large?: boolean;
+  disabled?: boolean;
   rightSlot?: ReactNode;
 };
 
@@ -24,6 +25,7 @@ export function GradientButton({
   variant = 'primary',
   compact = false,
   large = false,
+  disabled = false,
   rightSlot,
 }: GradientButtonProps) {
   const content = (
@@ -44,20 +46,26 @@ export function GradientButton({
         : gradients.primary;
 
   return (
-    <Pressable onPress={onPress}>
+    <Pressable disabled={disabled} onPress={onPress} style={disabled && styles.disabledWrap}>
       {variant === 'primary' || variant === 'gold' ? (
         <LinearGradient
           colors={[...gradientColors]}
           end={{ x: 1, y: 0.5 }}
           start={{ x: 0, y: 0.5 }}
-          style={[styles.button, compact && styles.compactButton, large && styles.largeButton]}
+          style={[styles.button, compact && styles.compactButton, large && styles.largeButton, disabled && styles.disabledButton]}
         >
           {content}
         </LinearGradient>
       ) : (
         <LinearGradient
           colors={variant === 'secondary' ? [...gradients.secondary] : ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.02)']}
-          style={[styles.button, compact && styles.compactButton, large && styles.largeButton, variant === 'secondary' ? styles.secondary : styles.ghost]}
+          style={[
+            styles.button,
+            compact && styles.compactButton,
+            large && styles.largeButton,
+            variant === 'secondary' ? styles.secondary : styles.ghost,
+            disabled && styles.disabledButton,
+          ]}
         >
           {content}
         </LinearGradient>
@@ -81,6 +89,12 @@ const styles = StyleSheet.create({
   largeButton: {
     minHeight: 86,
     paddingVertical: spacing.md,
+  },
+  disabledWrap: {
+    opacity: 0.72,
+  },
+  disabledButton: {
+    opacity: 0.72,
   },
   secondary: {
     borderWidth: 1,

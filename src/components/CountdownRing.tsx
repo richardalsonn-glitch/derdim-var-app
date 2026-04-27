@@ -8,6 +8,7 @@ type CountdownRingProps = {
   remainingSeconds: number;
   size?: number;
   tone?: 'purple' | 'gold' | 'blue';
+  caption?: string;
 };
 
 type CountdownOptions = {
@@ -71,7 +72,7 @@ export function formatSeconds(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
-export function CountdownRing({ totalSeconds, remainingSeconds, size = 232, tone = 'purple' }: CountdownRingProps) {
+export function CountdownRing({ totalSeconds, remainingSeconds, size = 232, tone = 'purple', caption = 'kalan süre' }: CountdownRingProps) {
   const pulse = useRef(new Animated.Value(0.96)).current;
   const progress = totalSeconds === 0 ? 0 : remainingSeconds / totalSeconds;
   const ringColor = tone === 'gold' ? colors.gold : tone === 'blue' ? colors.cyan : colors.purple;
@@ -116,7 +117,7 @@ export function CountdownRing({ totalSeconds, remainingSeconds, size = 232, tone
       <View style={[styles.outerRing, { width: size - 14, height: size - 14, borderRadius: (size - 14) / 2, borderColor: `${ringColor}88` }]}>
         <View style={[styles.middleRing, { width: size - 34, height: size - 34, borderRadius: (size - 34) / 2 }]}>
           <View style={[styles.innerSurface, { width: size - 56, height: size - 56, borderRadius: (size - 56) / 2 }]}>
-            <Text style={styles.caption}>kalan süre</Text>
+            <Text style={styles.caption}>{caption}</Text>
             <Text adjustsFontSizeToFit numberOfLines={1} style={styles.time}>
               {formatSeconds(remainingSeconds)}
             </Text>
@@ -158,18 +159,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(8, 10, 28, 0.96)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 22,
-    gap: 10,
+    paddingHorizontal: 18,
+    gap: 6,
   },
   caption: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 12,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   time: {
     color: colors.text,
-    fontSize: 40,
+    fontSize: 34,
     fontWeight: '800',
     width: '100%',
     textAlign: 'center',

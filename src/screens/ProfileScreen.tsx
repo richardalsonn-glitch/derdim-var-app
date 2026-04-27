@@ -3,16 +3,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar } from '../components/Avatar';
-import { BadgePill } from '../components/BadgePill';
 import { FormInput } from '../components/FormInput';
 import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { colors, spacing } from '../constants/theme';
+import { colors, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { badges, getAvatarById, profileStats, receivedGifts } from '../data/mockData';
+import { badges, getAvatarById, receivedGifts } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 
 const USERNAME_CHANGE_WINDOW_DAYS = 7;
@@ -24,11 +23,11 @@ function getRemainingDays(lastChangeDate: string) {
 }
 
 export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
-  const { profile, updateUsername } = useAppState();
+  const { profile, updateUsername, userLevel, userScore } = useAppState();
   const [usernameDraft, setUsernameDraft] = useState(profile.username);
   const [reportVisible, setReportVisible] = useState(false);
   const [usernameNoticeVisible, setUsernameNoticeVisible] = useState(false);
-  const avatar = getAvatarById(profile.avatarId);
+  const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
   const remainingDays = useMemo(() => getRemainingDays(profile.lastUsernameChangeDate), [profile.lastUsernameChangeDate]);
   const canChangeUsername = remainingDays === 0;
 
@@ -42,23 +41,40 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
       return;
     }
 
-    updateUsername(usernameDraft);
+    updateUsername(usernameDraft.trim() || profile.username);
   };
 
   return (
     <PremiumScreen>
-      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Profil, rozetler ve hediye istatistikleri" title="Profil" />
+      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Anonim profil ve güvenlik özeti" title="Profil" />
 
       <GlassCard style={styles.heroCard} toned="strong">
-        <Avatar avatar={avatar} size={108} />
+        <Avatar avatar={avatar} size={96} />
         <View style={styles.heroCopy}>
           <Text style={styles.alias}>{profile.username}</Text>
           <Text style={styles.packageLabel}>{profile.plan.toUpperCase()} plan aktif</Text>
-          <Text style={styles.meta}>
-            {profile.gender} • {profile.age} yaş • {profile.relationshipStatus}
-          </Text>
+          <View style={styles.metaRow}>
+            <View style={styles.metaPill}>
+              <Text style={styles.metaText}>{profile.age} yaş</Text>
+            </View>
+            <View style={styles.metaPill}>
+              <Text style={styles.metaText}>{profile.gender}</Text>
+            </View>
+            <View style={styles.metaPill}>
+              <Text style={styles.metaText}>{profile.relationshipStatus}</Text>
+            </View>
+          </View>
           <Text style={styles.meta}>Kayıt tarihi {profile.joinDate}</Text>
-          <Text style={styles.meta}>E-posta {profile.email}</Text>
+          <View style={styles.scoreRow}>
+            <View style={styles.scoreChip}>
+              <Text style={styles.scoreValue}>{userScore}</Text>
+              <Text style={styles.scoreLabel}>Derman Puanı</Text>
+            </View>
+            <View style={styles.scoreChip}>
+              <Text style={styles.scoreValue}>Level {userLevel}</Text>
+              <Text style={styles.scoreLabel}>İyilik Seviyesi</Text>
+            </View>
+          </View>
         </View>
       </GlassCard>
 
@@ -67,53 +83,44 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
         <FormInput icon="create-outline" label="Takma ad" onChangeText={setUsernameDraft} placeholder="takma ad" value={usernameDraft} />
         <Text style={styles.note}>Kullanıcı adını 7 günde 1 kez değiştirebilirsin.</Text>
         {!canChangeUsername ? <Text style={styles.cooldown}>Tekrar değiştirmek için {remainingDays} gün beklemelisin.</Text> : null}
-        <GradientButton
-          onPress={handleUsernameUpdate}
-          title="Kullanıcı adını güncelle"
-          variant="secondary"
-        />
+        <GradientButton disabled={!canChangeUsername} onPress={handleUsernameUpdate} title="Kullanıcı adını güncelle" variant="secondary" />
       </GlassCard>
-
-      <View style={styles.statsRow}>
-        <GlassCard style={styles.statCard}>
-          <Text style={styles.statValue}>{profileStats.score}</Text>
-          <Text style={styles.statLabel}>Derman puanı</Text>
-        </GlassCard>
-        <GlassCard style={styles.statCard}>
-          <Text style={styles.statValue}>{profileStats.helpedCount}</Text>
-          <Text style={styles.statLabel}>İyi geldiğin kişi</Text>
-        </GlassCard>
-        <GlassCard style={styles.statCard}>
-          <Text style={styles.statValue}>{profileStats.likes}</Text>
-          <Text style={styles.statLabel}>Toplam beğeni</Text>
-        </GlassCard>
-      </View>
 
       <GlassCard style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Aldığı hediyeler</Text>
-        <View style={styles.giftRow}>
+        <View style={styles.grid}>
           {receivedGifts.map((gift) => (
-            <View key={gift.id} style={styles.giftCard}>
+            <View key={gift.id} style={styles.gridCard}>
               <Text style={styles.giftSymbol}>{gift.symbol}</Text>
-              <Text style={styles.giftName}>{gift.name}</Text>
-              <Text style={styles.giftCount}>x{gift.count}</Text>
+              <Text style={styles.gridTitle}>{gift.name}</Text>
+              <Text style={styles.gridMeta}>x{gift.count}</Text>
             </View>
           ))}
         </View>
-        <Text style={styles.giftNote}>Hediye gönderenlerin adı görünmez; yalnızca toplam destek sayısı gösterilir.</Text>
+        <Text style={styles.giftNote}>Hediye veren kişinin adı görünmez; yalnızca destek sayısı gösterilir.</Text>
       </GlassCard>
 
       <GlassCard style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Rozetler</Text>
-        <View style={styles.badgesWrap}>
+        <View style={styles.badgeGrid}>
           {badges.map((badge) => (
-            <BadgePill badge={badge} key={badge.id} />
+            <View key={badge.id} style={styles.badgeCard}>
+              <View style={styles.badgeIconWrap}>
+                <Ionicons color={colors.text} name={badge.icon} size={18} />
+              </View>
+              <Text numberOfLines={1} style={styles.gridTitle}>
+                {badge.name}
+              </Text>
+              <Text numberOfLines={2} style={styles.badgeMeta}>
+                {badge.description}
+              </Text>
+            </View>
           ))}
         </View>
       </GlassCard>
 
       <GlassCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Güvenlik ve konumlandırma</Text>
+        <Text style={styles.sectionTitle}>Güvenlik</Text>
         <View style={styles.summaryRow}>
           <Ionicons color={colors.cyan} name="sparkles" size={16} />
           <Text style={styles.summaryText}>Bu uygulama terapi hizmeti değil; anonim sosyal destek alanıdır.</Text>
@@ -154,10 +161,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    paddingVertical: spacing.md,
   },
   heroCopy: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
   alias: {
     color: colors.text,
@@ -168,37 +176,51 @@ const styles = StyleSheet.create({
     color: colors.goldSoft,
     fontWeight: '700',
   },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metaPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  metaText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   meta: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 12,
   },
-  note: {
-    color: colors.dim,
-    lineHeight: 18,
-  },
-  cooldown: {
-    color: colors.pink,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  statsRow: {
+  scoreRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  statCard: {
+  scoreChip: {
     flex: 1,
-    gap: 4,
+    minHeight: 64,
+    borderRadius: radius.lg,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  statValue: {
+  scoreValue: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 16,
     fontWeight: '800',
   },
-  statLabel: {
+  scoreLabel: {
     color: colors.muted,
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 11,
+    marginTop: 2,
   },
   sectionCard: {
     gap: spacing.md,
@@ -208,38 +230,73 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
-  giftRow: {
+  note: {
+    color: colors.dim,
+    lineHeight: 18,
+    fontSize: 12,
+  },
+  cooldown: {
+    color: colors.pink,
+    fontWeight: '700',
+    lineHeight: 18,
+    fontSize: 12,
+  },
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  giftCard: {
+  gridCard: {
     width: '48%',
     padding: spacing.md,
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: 'rgba(255,255,255,0.04)',
-    gap: 2,
+    gap: 4,
   },
   giftSymbol: {
-    fontSize: 28,
+    fontSize: 24,
   },
-  giftName: {
+  gridTitle: {
     color: colors.text,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  giftCount: {
+  gridMeta: {
     color: colors.muted,
+    fontSize: 12,
   },
   giftNote: {
     color: colors.muted,
-    lineHeight: 20,
+    lineHeight: 18,
+    fontSize: 12,
   },
-  badgesWrap: {
+  badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing.sm,
+  },
+  badgeCard: {
+    width: '48%',
+    padding: spacing.md,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    gap: 6,
+  },
+  badgeIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  badgeMeta: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 15,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -249,6 +306,7 @@ const styles = StyleSheet.create({
   summaryText: {
     color: colors.muted,
     flex: 1,
-    lineHeight: 19,
+    lineHeight: 18,
+    fontSize: 12,
   },
 });

@@ -9,11 +9,13 @@ import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
+import { useAppState } from '../data/AppContext';
 import { getAvatarById, nightRoomUsers } from '../data/mockData';
 import { requestMicrophonePermission } from '../services/permissionsService';
 import { AppScreenProps } from '../navigation/types';
 
 export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
+  const { setActiveRole } = useAppState();
   const glow = useRef(new Animated.Value(0.7)).current;
   const [permissionModalVisible, setPermissionModalVisible] = useState(false);
 
@@ -35,6 +37,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
       setPermissionModalVisible(true);
       return;
     }
+    setActiveRole('derdim-var');
     navigation.navigate('Matching');
   };
 
@@ -70,7 +73,15 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 
       <View style={styles.actions}>
         <GradientButton icon="mic" onPress={handleWordTake} title="Söz Al" />
-        <GradientButton icon="headset" onPress={() => navigation.navigate('Chat')} title="Dinleyici Olarak Katıl" variant="secondary" />
+        <GradientButton
+          icon="headset"
+          onPress={() => {
+            setActiveRole('derman-olan');
+            navigation.navigate('Matching');
+          }}
+          title="Dinleyici Olarak Katıl"
+          variant="secondary"
+        />
       </View>
 
       <NoticeModal

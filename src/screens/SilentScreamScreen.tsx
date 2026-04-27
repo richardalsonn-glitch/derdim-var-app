@@ -10,11 +10,13 @@ import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
+import { useAppState } from '../data/AppContext';
 import { getAvatarById, silentListeners } from '../data/mockData';
 import { requestMicrophonePermission } from '../services/permissionsService';
 import { AppScreenProps } from '../navigation/types';
 
 export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'>) {
+  const { setActiveRole } = useAppState();
   const [voteMessage, setVoteMessage] = useState('%30 evet olursa +1 dakika uzar.');
   const [expiredVisible, setExpiredVisible] = useState(false);
   const [permissionModalVisible, setPermissionModalVisible] = useState(false);
@@ -39,7 +41,8 @@ export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'
       return;
     }
 
-    navigation.navigate('Chat');
+    setActiveRole('derdim-var');
+    navigation.navigate('Matching');
   };
 
   return (

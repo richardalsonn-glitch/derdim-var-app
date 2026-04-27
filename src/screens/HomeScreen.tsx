@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -9,6 +10,7 @@ import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
+import { SideDrawer } from '../components/SideDrawer';
 import { colors, gradients, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, helpedToday, moodOptions } from '../data/mockData';
@@ -16,15 +18,16 @@ import { AppScreenProps } from '../navigation/types';
 import { MatchRole } from '../types';
 import { requestMicrophonePermission } from '../services/permissionsService';
 
-// TODO: Moderasyon ve sikayet paneli baglanacak
+const AUTO_CALL_SECONDS = 45;
 
-const menuItems = [
-  { label: 'Anonim Mektup Kutusu', icon: 'mail', route: 'Letters' as const },
-  { label: 'Paketler', icon: 'diamond', route: 'Packages' as const },
-  { label: 'Tekrar Eşleşme', icon: 'refresh', route: 'Rematch' as const },
-  { label: 'Rozet Sistemi', icon: 'ribbon', route: 'Badges' as const },
-  { label: 'Profil', icon: 'person', route: 'Profile' as const },
-  { label: 'Ayarlar', icon: 'settings', route: 'Settings' as const },
+const drawerItems = [
+  { label: 'Profil', icon: 'person' as const, route: 'Profile' as const },
+  { label: 'Anonim Mektup Kutusu', icon: 'mail' as const, route: 'Letters' as const },
+  { label: 'Paketler', icon: 'diamond' as const, route: 'Packages' as const },
+  { label: 'Tekrar Eşleşme', icon: 'refresh' as const, route: 'Rematch' as const },
+  { label: 'Rozet Sistemi', icon: 'ribbon' as const, route: 'Badges' as const },
+  { label: 'Ayarlar', icon: 'settings' as const, route: 'Settings' as const },
+  { label: 'Çıkış', icon: 'log-out' as const, route: 'Login' as const },
 ];
 
 function formatAutoCallLabel(seconds: number) {
@@ -32,28 +35,30 @@ function formatAutoCallLabel(seconds: number) {
 }
 
 export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
-  const { profile, setActiveRole, updateProfile, setAutoCallEnabled } = useAppState();
+  const { profile, setActiveRole, updateProfile, setAutoCallEnabled, userScore, userLevel } = useAppState();
   const [selectedMood, setSelectedMood] = useState(profile.mood);
   const [permissionModalVisible, setPermissionModalVisible] = useState(false);
   const [pendingRole, setPendingRole] = useState<MatchRole | null>(null);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [autoCallCountdown, setAutoCallCountdown] = useState(10);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [autoCallCountdown, setAutoCallCountdown] = useState(AUTO_CALL_SECONDS);
+  const [themeMockEnabled, setThemeMockEnabled] = useState(false);
+  const isFocused = useIsFocused();
   const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
 
   const resetAutoCall = () => {
     if (profile.autoCallEnabled) {
-      setAutoCallCountdown(10);
+      setAutoCallCountdown(AUTO_CALL_SECONDS);
     }
   };
 
   useEffect(() => {
-    if (!profile.autoCallEnabled) {
+    if (!profile.autoCallEnabled || !isFocused) {
       return;
     }
 
     if (autoCallCountdown <= 0) {
       navigation.navigate('Matching');
-      setAutoCallCountdown(10);
+      setAutoCallCountdown(AUTO_CALL_SECONDS);
       return;
     }
 
@@ -62,13 +67,13 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }, 1000);
 
     return () => clearTimeout(timerId);
-  }, [autoCallCountdown, navigation, profile.autoCallEnabled]);
+  }, [autoCallCountdown, isFocused, navigation, profile.autoCallEnabled]);
 
   useEffect(() => {
-    if (profile.autoCallEnabled) {
-      setAutoCallCountdown(10);
+    if (profile.autoCallEnabled && isFocused) {
+      setAutoCallCountdown(AUTO_CALL_SECONDS);
     }
-  }, [profile.autoCallEnabled]);
+  }, [isFocused, profile.autoCallEnabled]);
 
   const proceedToMatching = (role: MatchRole) => {
     setActiveRole(role);
@@ -90,138 +95,178 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     setPermissionModalVisible(true);
   };
 
-  const navigateMenu = (route: (typeof menuItems)[number]['route']) => {
-    setMenuVisible(false);
+  const navigateMenu = (route: (typeof drawerItems)[number]['route']) => {
+    setDrawerVisible(false);
     resetAutoCall();
+    if (route === 'Login') {
+      navigation.replace('Login');
+      return;
+    }
+
     navigation.navigate(route);
   };
 
   return (
-    <PremiumScreen>
-      <GlassCard style={styles.heroCard}>
-        <View style={styles.heroTop}>
-          <View style={styles.identity}>
-            <Avatar avatar={avatar} size={74} />
-            <View style={styles.identityCopy}>
-              <Text style={styles.alias}>{profile.username}</Text>
-              <Text style={styles.meta}>
-                {profile.plan.toUpperCase()} plan • {profile.age} yaş • {profile.gender}
-              </Text>
-            </View>
-          </View>
+    <PremiumScreen scroll={false} contentStyle={styles.content}>
+      <View style={styles.page}>
+        <View style={styles.topRow}>
+          <Pressable
+            onPress={() => {
+              resetAutoCall();
+              setDrawerVisible(true);
+            }}
+            style={styles.drawerButton}
+          >
+            <Ionicons color={colors.text} name="menu" size={22} />
+          </Pressable>
 
           <Pressable
             onPress={() => {
               resetAutoCall();
-              setMenuVisible(true);
+              setThemeMockEnabled((current) => !current);
             }}
-            style={styles.menuButton}
+            style={[styles.themeButton, themeMockEnabled && styles.themeButtonActive]}
           >
-            <Ionicons color={colors.text} name="menu" size={22} />
+            <Ionicons color={themeMockEnabled ? colors.gold : colors.text} name={themeMockEnabled ? 'sunny' : 'moon'} size={20} />
           </Pressable>
         </View>
 
-        <LinearGradient colors={[...gradients.surface]} style={styles.counterPill}>
-          <Ionicons color={colors.cyan} name="sparkles" size={18} />
-          <Text style={styles.counterText}>Bugün {helpedToday} kişiye iyi geldin</Text>
-        </LinearGradient>
-      </GlassCard>
+        <GlassCard style={styles.heroCard} toned="strong">
+          <View style={styles.heroHeader}>
+            <View style={styles.identity}>
+              <Avatar avatar={avatar} size={68} />
+              <View style={styles.identityCopy}>
+                <Text style={styles.alias}>{profile.username}</Text>
+                <Text style={styles.meta}>
+                  {profile.plan.toUpperCase()} plan • {profile.age} yaş • {profile.gender}
+                </Text>
+                <Text style={styles.meta}>{profile.relationshipStatus}</Text>
+              </View>
+            </View>
 
-      <View style={styles.primarySection}>
-        <LinearGradient colors={[...gradients.primary]} style={styles.primaryGlow}>
-          <GradientButton
-            icon="heart"
-            large
-            onPress={() => startVoiceFlow('derdim-var')}
-            subtitle="İçimi dökmek istiyorum"
-            title="Derdim Var"
-          />
-        </LinearGradient>
+            <LinearGradient colors={[...gradients.surface]} style={styles.todayPill}>
+              <Ionicons color={colors.cyan} name="sparkles" size={16} />
+              <Text style={styles.todayText}>Bugün {helpedToday} kişiye iyi geldin</Text>
+            </LinearGradient>
+          </View>
 
-        <LinearGradient colors={[...gradients.secondary]} style={styles.secondaryGlow}>
+          <View style={styles.statsRow}>
+            <View style={styles.statChip}>
+              <Text style={styles.statValue}>{userScore}</Text>
+              <Text style={styles.statLabel}>Derman Puanı</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Text style={styles.statValue}>Level {userLevel}</Text>
+              <Text style={styles.statLabel}>İyilik Seviyesi</Text>
+            </View>
+          </View>
+        </GlassCard>
+
+        <View style={styles.primaryStack}>
+          <LinearGradient colors={[...gradients.primary]} style={styles.primaryGlow}>
+            <GradientButton
+              icon="heart"
+              large
+              onPress={() => startVoiceFlow('derdim-var')}
+              subtitle="İçimi dökmek istiyorum"
+              title="Derdim Var"
+            />
+          </LinearGradient>
+
+          <LinearGradient colors={[...gradients.secondary]} style={styles.primaryGlow}>
+            <GradientButton
+              icon="headset"
+              large
+              onPress={() => startVoiceFlow('derman-olan')}
+              subtitle="Birini dinlemek istiyorum"
+              title="Derman Ol"
+              variant="secondary"
+            />
+          </LinearGradient>
+        </View>
+
+        <View style={styles.secondaryStack}>
           <GradientButton
-            icon="headset"
-            large
-            onPress={() => startVoiceFlow('derman-olan')}
-            subtitle="Birini dinlemek istiyorum"
-            title="Derman Ol"
+            icon="moon"
+            onPress={async () => {
+              resetAutoCall();
+              const result = await requestMicrophonePermission();
+              if (!result.granted) {
+                setPendingRole('derdim-var');
+                setPermissionModalVisible(true);
+                return;
+              }
+              navigation.navigate('NightMode');
+            }}
+            subtitle="22:00 - 02:00"
+            title="Gece Modu"
             variant="secondary"
           />
-        </LinearGradient>
-      </View>
 
-      <View style={styles.inlineActions}>
-        <Pressable
-          onPress={async () => {
-            resetAutoCall();
-            const result = await requestMicrophonePermission();
-            if (!result.granted) {
-              setPendingRole('derdim-var');
-              setPermissionModalVisible(true);
-              return;
-            }
-            navigation.navigate('NightMode');
-          }}
-          style={styles.inlineAction}
-        >
-          <Ionicons color={colors.text} name="moon" size={18} />
-          <View style={styles.inlineActionCopy}>
-            <Text style={styles.inlineActionTitle}>Gece Modu</Text>
-            <Text style={styles.inlineActionSubtitle}>22:00 - 02:00</Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            resetAutoCall();
-            navigation.navigate('SilentScream');
-          }}
-          style={styles.inlineAction}
-        >
-          <Ionicons color={colors.text} name="mic" size={18} />
-          <View style={styles.inlineActionCopy}>
-            <Text style={styles.inlineActionTitle}>Sessiz Çığlık</Text>
-            <Text style={styles.inlineActionSubtitle}>Dert Sıra Gecesi</Text>
-          </View>
-        </Pressable>
-      </View>
-
-      <GlassCard style={styles.autoCallCard}>
-        <View style={styles.autoCallHeader}>
-          <View style={styles.autoCallCopy}>
-            <Text style={styles.autoCallTitle}>Otomatik çağrı al</Text>
-            <Text style={styles.autoCallSubtitle}>10 saniye işlem yapmazsan seni uygun bir ses odasına bağlarız.</Text>
-          </View>
-          <Switch
-            onValueChange={(value) => {
-              setAutoCallEnabled(value);
-              setAutoCallCountdown(10);
+          <GradientButton
+            icon="mic"
+            onPress={() => {
+              resetAutoCall();
+              navigation.navigate('SilentScream');
             }}
-            thumbColor={profile.autoCallEnabled ? colors.text : '#F1F1F1'}
-            trackColor={{ false: 'rgba(255,255,255,0.14)', true: 'rgba(255,79,185,0.48)' }}
-            value={profile.autoCallEnabled}
+            subtitle="Dert Sıra Gecesi"
+            title="Sessiz Çığlık"
+            variant="gold"
           />
         </View>
-        {profile.autoCallEnabled ? <Text style={styles.autoCallCounter}>{formatAutoCallLabel(autoCallCountdown)}</Text> : null}
-      </GlassCard>
 
-      <GlassCard style={styles.moodCard}>
-        <Text style={styles.moodTitle}>Bugün ruh halin ne?</Text>
-        <View style={styles.moodRow}>
-          {moodOptions.map((mood) => (
-            <ChoiceChip
-              key={mood}
-              label={mood}
-              onPress={() => {
-                resetAutoCall();
-                setSelectedMood(mood);
-                updateProfile({ mood });
-              }}
-              selected={selectedMood === mood}
-            />
-          ))}
-        </View>
-      </GlassCard>
+        <GlassCard style={styles.autoCallCard}>
+          <View style={styles.autoCallHeader}>
+            <View style={styles.autoCallCopy}>
+              <Text style={styles.autoCallTitle}>Otomatik çağrı al</Text>
+              <Text style={styles.autoCallSubtitle}>45 saniye işlem yapmazsan seni uygun bir ses odasına bağlarız.</Text>
+            </View>
+            <View style={styles.autoCallSwitchWrap}>
+              <Pressable
+                onPress={() => {
+                  setAutoCallEnabled(!profile.autoCallEnabled);
+                  setAutoCallCountdown(AUTO_CALL_SECONDS);
+                }}
+                style={[styles.autoCallSwitch, profile.autoCallEnabled && styles.autoCallSwitchActive]}
+              >
+                <View style={[styles.autoCallKnob, profile.autoCallEnabled && styles.autoCallKnobActive]} />
+              </Pressable>
+            </View>
+          </View>
+          {profile.autoCallEnabled ? <Text style={styles.autoCallCounter}>{formatAutoCallLabel(autoCallCountdown)}</Text> : null}
+        </GlassCard>
+
+        <GlassCard style={styles.moodCard}>
+          <Text style={styles.moodTitle}>Bugün ruh halin ne?</Text>
+          <View style={styles.moodRow}>
+            {moodOptions.map((mood) => (
+              <ChoiceChip
+                key={mood}
+                label={mood}
+                onPress={() => {
+                  resetAutoCall();
+                  setSelectedMood(mood);
+                  updateProfile({ mood });
+                }}
+                selected={selectedMood === mood}
+              />
+            ))}
+          </View>
+        </GlassCard>
+      </View>
+
+      <SideDrawer
+        items={drawerItems.map((item) => ({
+          label: item.label,
+          icon: item.icon,
+          action: () => navigateMenu(item.route),
+        }))}
+        onClose={() => setDrawerVisible(false)}
+        profile={profile}
+        userLevel={userLevel}
+        userScore={userScore}
+        visible={drawerVisible}
+      />
 
       <NoticeModal
         actions={[
@@ -244,131 +289,128 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         title="Mikrofon izni gerekli"
         visible={permissionModalVisible}
       />
-
-      <Modal animationType="slide" transparent visible={menuVisible}>
-        <View style={styles.menuBackdrop}>
-          <Pressable onPress={() => setMenuVisible(false)} style={StyleSheet.absoluteFill} />
-          <GlassCard style={styles.menuSheet}>
-            <View style={styles.menuHeader}>
-              <Text style={styles.menuTitle}>Hızlı Menü</Text>
-              <Pressable onPress={() => setMenuVisible(false)} style={styles.menuClose}>
-                <Ionicons color={colors.text} name="close" size={18} />
-              </Pressable>
-            </View>
-
-            <View style={styles.menuList}>
-              {menuItems.map((item) => (
-                <Pressable key={item.label} onPress={() => navigateMenu(item.route)} style={styles.menuItem}>
-                  <View style={styles.menuItemIcon}>
-                    <Ionicons color={colors.text} name={item.icon as keyof typeof Ionicons.glyphMap} size={18} />
-                  </View>
-                  <Text style={styles.menuItemLabel}>{item.label}</Text>
-                  <Ionicons color={colors.muted} name="chevron-forward" size={16} />
-                </Pressable>
-              ))}
-            </View>
-          </GlassCard>
-        </View>
-      </Modal>
     </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    gap: spacing.md,
+  content: {
+    flex: 1,
   },
-  heroTop: {
+  page: {
+    flex: 1,
+    gap: spacing.sm,
+  },
+  topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.md,
   },
-  identity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    flex: 1,
-  },
-  identityCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  alias: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  meta: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  menuButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  drawerButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSoft,
   },
-  counterPill: {
-    alignSelf: 'flex-start',
+  themeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSoft,
+  },
+  themeButtonActive: {
+    borderColor: 'rgba(255, 215, 110, 0.38)',
+    backgroundColor: 'rgba(255, 215, 110, 0.08)',
+  },
+  heroCard: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  identityCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  alias: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  meta: {
+    color: colors.muted,
+    fontSize: 12,
+  },
+  todayPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  counterText: {
+  todayText: {
     color: colors.text,
+    fontSize: 12,
     fontWeight: '700',
   },
-  primarySection: {
-    gap: spacing.md,
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  statChip: {
+    flex: 1,
+    minHeight: 60,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  statValue: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  statLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  primaryStack: {
+    gap: spacing.sm,
   },
   primaryGlow: {
     borderRadius: radius.xl,
     padding: 1,
   },
-  secondaryGlow: {
-    borderRadius: radius.xl,
-    padding: 1,
-  },
-  inlineActions: {
-    gap: spacing.sm,
-  },
-  inlineAction: {
-    minHeight: 72,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  secondaryStack: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: spacing.sm,
-  },
-  inlineActionCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  inlineActionTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  inlineActionSubtitle: {
-    color: colors.muted,
-    fontSize: 12,
   },
   autoCallCard: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   autoCallHeader: {
     flexDirection: 'row',
@@ -386,80 +428,52 @@ const styles = StyleSheet.create({
   },
   autoCallSubtitle: {
     color: colors.muted,
-    lineHeight: 20,
+    lineHeight: 18,
+    fontSize: 12,
+  },
+  autoCallSwitchWrap: {
+    paddingLeft: spacing.xs,
+  },
+  autoCallSwitch: {
+    width: 58,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  autoCallSwitchActive: {
+    backgroundColor: 'rgba(69, 224, 255, 0.18)',
+    borderColor: 'rgba(69, 224, 255, 0.38)',
+  },
+  autoCallKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.text,
+    transform: [{ translateX: 0 }],
+  },
+  autoCallKnobActive: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.cyan,
   },
   autoCallCounter: {
     color: colors.cyan,
     fontWeight: '700',
   },
   moodCard: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   moodTitle: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
   },
   moodRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-  },
-  menuBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: spacing.lg,
-    backgroundColor: 'rgba(3, 6, 16, 0.6)',
-  },
-  menuSheet: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-  },
-  menuHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  menuTitle: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  menuClose: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  menuList: {
-    gap: spacing.xs,
-  },
-  menuItem: {
-    minHeight: 56,
-    borderRadius: radius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  menuItemIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  menuItemLabel: {
-    flex: 1,
-    color: colors.text,
-    fontWeight: '700',
+    gap: 8,
   },
 });
