@@ -12,6 +12,7 @@ type GradientButtonProps = {
   icon?: keyof typeof Ionicons.glyphMap;
   variant?: 'primary' | 'secondary' | 'ghost' | 'gold';
   compact?: boolean;
+  large?: boolean;
   rightSlot?: ReactNode;
 };
 
@@ -22,6 +23,7 @@ export function GradientButton({
   icon,
   variant = 'primary',
   compact = false,
+  large = false,
   rightSlot,
 }: GradientButtonProps) {
   const content = (
@@ -48,14 +50,14 @@ export function GradientButton({
           colors={[...gradientColors]}
           end={{ x: 1, y: 0.5 }}
           start={{ x: 0, y: 0.5 }}
-          style={[styles.button, compact && styles.compactButton]}
+          style={[styles.button, compact && styles.compactButton, large && styles.largeButton]}
         >
           {content}
         </LinearGradient>
       ) : (
         <LinearGradient
           colors={variant === 'secondary' ? [...gradients.secondary] : ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.02)']}
-          style={[styles.button, compact && styles.compactButton, variant === 'secondary' ? styles.secondary : styles.ghost]}
+          style={[styles.button, compact && styles.compactButton, large && styles.largeButton, variant === 'secondary' ? styles.secondary : styles.ghost]}
         >
           {content}
         </LinearGradient>
@@ -75,6 +77,10 @@ const styles = StyleSheet.create({
   },
   compactButton: {
     minHeight: 48,
+  },
+  largeButton: {
+    minHeight: 86,
+    paddingVertical: spacing.md,
   },
   secondary: {
     borderWidth: 1,

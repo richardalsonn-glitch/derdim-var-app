@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -15,11 +15,35 @@ import { useAppState } from '../data/AppContext';
 import { badges, getAvatarById, profileStats, receivedGifts } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 
+const USERNAME_CHANGE_WINDOW_DAYS = 7;
+
+function getRemainingDays(lastChangeDate: string) {
+  const elapsedMs = Date.now() - new Date(lastChangeDate).getTime();
+  const fullDaysElapsed = Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+  return Math.max(0, USERNAME_CHANGE_WINDOW_DAYS - fullDaysElapsed);
+}
+
 export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
-  const { profile, updateProfile } = useAppState();
+  const { profile, updateUsername } = useAppState();
   const [usernameDraft, setUsernameDraft] = useState(profile.username);
   const [reportVisible, setReportVisible] = useState(false);
+  const [usernameNoticeVisible, setUsernameNoticeVisible] = useState(false);
   const avatar = getAvatarById(profile.avatarId);
+  const remainingDays = useMemo(() => getRemainingDays(profile.lastUsernameChangeDate), [profile.lastUsernameChangeDate]);
+  const canChangeUsername = remainingDays === 0;
+
+  useEffect(() => {
+    setUsernameDraft(profile.username);
+  }, [profile.username]);
+
+  const handleUsernameUpdate = () => {
+    if (!canChangeUsername) {
+      setUsernameNoticeVisible(true);
+      return;
+    }
+
+    updateUsername(usernameDraft);
+  };
 
   return (
     <PremiumScreen>
@@ -41,10 +65,11 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
       <GlassCard style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Kullanıcı adı</Text>
         <FormInput icon="create-outline" label="Takma ad" onChangeText={setUsernameDraft} placeholder="takma ad" value={usernameDraft} />
-        <Text style={styles.note}>Kullanıcı adını ayda 1 kez değiştirebilirsin.</Text>
+        <Text style={styles.note}>Kullanıcı adını 7 günde 1 kez değiştirebilirsin.</Text>
+        {!canChangeUsername ? <Text style={styles.cooldown}>Tekrar değiştirmek için {remainingDays} gün beklemelisin.</Text> : null}
         <GradientButton
-          onPress={() => updateProfile({ username: usernameDraft })}
-          title="Kullanıcı adını mock olarak güncelle"
+          onPress={handleUsernameUpdate}
+          title="Kullanıcı adını güncelle"
           variant="secondary"
         />
       </GlassCard>
@@ -104,6 +129,15 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
 
       <NoticeModal
         actions={[
+          { label: 'Tamam', onPress: () => setUsernameNoticeVisible(false), variant: 'secondary' },
+        ]}
+        message="Kullanıcı adını tekrar değiştirmek için 7 gün beklemelisin."
+        title="Kullanıcı adı limiti"
+        visible={usernameNoticeVisible}
+      />
+
+      <NoticeModal
+        actions={[
           { label: 'Şikayet et', onPress: () => navigation.navigate('Home'), variant: 'gold' },
           { label: 'Vazgeç', onPress: () => setReportVisible(false), variant: 'ghost' },
         ]}
@@ -140,6 +174,11 @@ const styles = StyleSheet.create({
   },
   note: {
     color: colors.dim,
+    lineHeight: 18,
+  },
+  cooldown: {
+    color: colors.pink,
+    fontWeight: '700',
     lineHeight: 18,
   },
   statsRow: {

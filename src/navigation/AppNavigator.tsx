@@ -16,6 +16,7 @@ import { ProfileInfoScreen } from '../screens/ProfileInfoScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { RematchScreen } from '../screens/RematchScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { SilentScreamScreen } from '../screens/SilentScreamScreen';
 import { SplashScreen } from '../screens/SplashScreen';
 import { RootStackParamList } from './types';
@@ -60,6 +61,7 @@ export function AppNavigator() {
         <Stack.Screen component={LettersScreen} name="Letters" />
         <Stack.Screen component={RematchScreen} name="Rematch" />
         <Stack.Screen component={BadgesScreen} name="Badges" />
+        <Stack.Screen component={SettingsScreen} name="Settings" />
         <Stack.Screen
           component={GiftPopupScreen}
           name="GiftPopup"

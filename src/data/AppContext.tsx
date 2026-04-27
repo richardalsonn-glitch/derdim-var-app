@@ -8,8 +8,10 @@ type AppContextValue = {
   activeRole: MatchRole;
   activeTopic: TopicTag;
   updateProfile: (patch: Partial<AppProfile>) => void;
+  updateUsername: (username: string) => void;
   setPlan: (plan: MembershipPlan) => void;
   setAvatar: (avatarId: string) => void;
+  setAutoCallEnabled: (value: boolean) => void;
   setActiveRole: (role: MatchRole) => void;
   setActiveTopic: (topic: TopicTag) => void;
 };
@@ -37,11 +39,21 @@ export function AppProvider({ children }: PropsWithChildren) {
           return next;
         });
       },
+      updateUsername: (username) => {
+        setProfile((current) => ({
+          ...current,
+          username,
+          lastUsernameChangeDate: new Date().toISOString(),
+        }));
+      },
       setPlan: (plan) => {
         setProfile((current) => ({ ...current, plan }));
       },
       setAvatar: (avatarId) => {
         setProfile((current) => ({ ...current, avatarId }));
+      },
+      setAutoCallEnabled: (value) => {
+        setProfile((current) => ({ ...current, autoCallEnabled: value }));
       },
       setActiveRole,
       setActiveTopic,

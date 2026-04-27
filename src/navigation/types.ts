@@ -17,6 +17,7 @@ export type RootStackParamList = {
   Letters: undefined;
   Rematch: undefined;
   Badges: undefined;
+  Settings: undefined;
 };
 
 export type AppScreenProps<RouteName extends keyof RootStackParamList> = NativeStackScreenProps<

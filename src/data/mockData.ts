@@ -250,6 +250,8 @@ export const defaultProfile = {
   avatarId: 'f-2',
   mood: 'Konuşmak istiyorum',
   email: 'gizli@derdimvar.app',
+  lastUsernameChangeDate: '2026-04-01T12:00:00.000Z',
+  autoCallEnabled: true,
 };
 
 export const guestProfile = {

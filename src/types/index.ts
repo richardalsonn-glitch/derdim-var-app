@@ -85,4 +85,6 @@ export type AppProfile = {
   avatarId: string;
   mood: string;
   email?: string;
+  lastUsernameChangeDate: string;
+  autoCallEnabled: boolean;
 };
