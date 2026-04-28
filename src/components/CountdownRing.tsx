@@ -203,9 +203,9 @@ export function CountdownRing({
   const titleSize = clamp(size * 0.05, 14, 21);
   const timeSize = clamp(size * 0.18, 44, 60);
   const subtitleSize = clamp(size * 0.05, 13, 19);
-  const promoIconSize = clamp(size * 0.06, 16, 22);
-  const promoTextSize = clamp(size * 0.04, 12, 15);
-  const promoPaddingHorizontal = clamp(size * 0.052, 16, 22);
+  const promoIconSize = clamp(size * 0.05, 14, 18);
+  const promoTextSize = clamp(size * 0.032, 10, 12);
+  const promoPaddingHorizontal = clamp(size * 0.03, 10, 14);
   const titleIconSize = clamp(size * 0.066, 18, 24);
   const contentGap = clamp(size * 0.022, 8, 12);
 
@@ -279,7 +279,7 @@ export function CountdownRing({
           {promoText ? (
             <View style={[styles.promoPill, { paddingHorizontal: promoPaddingHorizontal }]}>
               <Ionicons color={colors.pink} name={promoIcon} size={promoIconSize} />
-              <Text numberOfLines={2} style={[styles.promoText, { fontSize: promoTextSize, lineHeight: promoTextSize * 1.24 }]}>
+              <Text numberOfLines={1} style={[styles.promoText, { fontSize: promoTextSize, lineHeight: promoTextSize * 1.16 }]}>
                 {promoText}
               </Text>
             </View>
@@ -356,9 +356,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   promoPill: {
-    minHeight: 40,
-    marginTop: 4,
-    paddingVertical: 9,
+    minHeight: 30,
+    marginTop: 2,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -366,7 +366,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
+    maxWidth: '78%',
   },
   promoText: {
     color: colors.text,

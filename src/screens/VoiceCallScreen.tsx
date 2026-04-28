@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, Vibration, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -68,6 +69,7 @@ type Metrics = {
 
 const SEARCH_SECONDS = 2;
 const CALL_SECONDS = 60;
+const COUNTDOWN_AUDIO_SOURCE = require('../../assets/audio/gerisayim-1.m4a');
 
 const partners: MatchPartner[] = [
   { id: 'luna', username: 'Luna_24', avatarId: 'f-2', gender: 'Kadın', plan: 'vip', dermanScore: 4.8, level: 3 },
@@ -222,7 +224,10 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   const partnerBadge = getBadge(partner.plan);
   const giftBonusSeconds = profile.plan === 'vip' ? 600 : 300;
   const lastCountdownAlertRef = useRef<number | null>(null);
+  const countdownAudioStartedRef = useRef(false);
+  const countdownAudioRef = useRef<AudioPlayer | null>(null);
   const remainingLikes = Math.max(0, dailyAppreciationLimit - dailyAppreciationUsed);
+  const blockedIdsKey = blockedUserIds.join('|');
 
   const { remainingSeconds, addSeconds, reset, setIsRunning } = useCountdownTimer({
     initialSeconds: CALL_SECONDS,
@@ -241,6 +246,19 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   );
 
   useEffect(() => {
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
+    const player = createAudioPlayer(COUNTDOWN_AUDIO_SOURCE);
+    player.volume = 0.9;
+    countdownAudioRef.current = player;
+
+    return () => {
+      player.pause();
+      player.remove();
+      countdownAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     const timerId = setInterval(() => {
       setLikeResetCountdown(getUntilNextReset());
     }, 1000);
@@ -249,8 +267,11 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   }, []);
 
   useEffect(() => {
-    if (!isMatched || !countdownAlertsEnabled || remainingSeconds > 10 || remainingSeconds <= 0) {
+    if (!isMatched || remainingSeconds > 10 || remainingSeconds <= 0) {
       lastCountdownAlertRef.current = null;
+      countdownAudioStartedRef.current = false;
+      countdownAudioRef.current?.pause();
+      countdownAudioRef.current?.seekTo(0).catch(() => undefined);
       return;
     }
 
@@ -262,7 +283,18 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
 
     // TODO: production countdown beep audio asset eklenecek.
     // TODO: bu geri sayım uyarısı ileride realtime ile iki taraf için senkron tetiklenecek.
-    Vibration.vibrate(45);
+    if (countdownAlertsEnabled) {
+      Vibration.vibrate(45);
+    }
+
+    if (remainingSeconds === 10 && !countdownAudioStartedRef.current) {
+      countdownAudioStartedRef.current = true;
+      countdownAudioRef.current?.seekTo(0).then(() => {
+        countdownAudioRef.current?.play();
+      }).catch(() => {
+        countdownAudioRef.current?.play();
+      });
+    }
   }, [countdownAlertsEnabled, isMatched, remainingSeconds]);
 
   function getPartnerSummary(matchPartner: MatchPartner): FriendSummary {
@@ -308,7 +340,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
 
   useEffect(() => {
     startSearch(matchSeed);
-  }, [blockedUserIds, matchSeed, skipCount]);
+  }, [blockedIdsKey, matchSeed, skipCount]);
 
   useEffect(() => {
     if (phase !== 'searching') {
@@ -556,7 +588,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
           <View style={styles.ringSection}>
             <View style={[styles.ringWrap, { minHeight: metrics.ring + 10 }]}>
               <CountdownRing
-                promoText={isMatched ? `Hediye: +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
+                promoText={isMatched ? `Hediye +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
                 promoIcon="gift"
                 remainingSeconds={isMatched ? remainingSeconds : searchRemaining}
                 segmentCount={76}
