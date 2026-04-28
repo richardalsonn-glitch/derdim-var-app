@@ -34,6 +34,7 @@ type HomeMetrics = {
   sidePadding: number;
   topPadding: number;
   bottomPadding: number;
+  contentBottomGap: number;
   gap: number;
   topHeight: number;
   profileHeight: number;
@@ -41,7 +42,8 @@ type HomeMetrics = {
   autoHeight: number;
   featureBlockHeight: number;
   featureCardHeight: number;
-  bottomHeight: number;
+  tabBarHeight: number;
+  tabBarOffset: number;
   iconButton: number;
 };
 
@@ -175,14 +177,17 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
   const topPadding = 8;
   const bottomPadding = short ? 8 : 12;
   const gap = short ? 8 : 10;
-  const available = height - insetsTop - insetsBottom - topPadding - bottomPadding - gap * 5;
-  const topHeight = Math.round(Math.min(60, Math.max(50, available * 0.075)));
+  const contentBottomGap = short ? 10 : 12;
+  const tabBarHeight = compact ? 76 : 82;
+  const tabBarOffset = insetsBottom + 8;
+  const reservedBottom = tabBarHeight + tabBarOffset + contentBottomGap;
+  const available = height - insetsTop - topPadding - bottomPadding - reservedBottom - gap * 4;
+  const topHeight = Math.round(Math.min(58, Math.max(46, available * 0.075)));
   const profileHeight = Math.round(Math.min(128, Math.max(108, available * 0.145)));
-  const ctaBlockHeight = Math.round(Math.min(246, Math.max(198, available * 0.255)));
-  const autoHeight = Math.round(Math.min(90, Math.max(74, available * 0.11)));
-  const bottomHeight = Math.round(Math.min(90, Math.max(74, available * 0.11)));
-  const featureBlockHeight = available - topHeight - profileHeight - ctaBlockHeight - autoHeight - bottomHeight;
-  const featureCardHeight = Math.floor((featureBlockHeight - gap * 2) / 3);
+  const ctaBlockHeight = Math.round(Math.min(228, Math.max(184, available * 0.235)));
+  const autoHeight = Math.round(Math.min(84, Math.max(70, available * 0.098)));
+  const featureBlockHeight = Math.max(198, available - topHeight - profileHeight - ctaBlockHeight - autoHeight);
+  const featureCardHeight = Math.max(compact ? 58 : 62, Math.floor((featureBlockHeight - gap * 2) / 3));
 
   return {
     compact,
@@ -190,6 +195,7 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
     sidePadding,
     topPadding,
     bottomPadding,
+    contentBottomGap,
     gap,
     topHeight,
     profileHeight,
@@ -197,7 +203,8 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
     autoHeight,
     featureBlockHeight,
     featureCardHeight,
-    bottomHeight,
+    tabBarHeight,
+    tabBarOffset,
     iconButton: compact ? 42 : 48,
   };
 }
@@ -493,12 +500,23 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           <View style={{ height: metrics.featureBlockHeight }}>
             <FeatureGrid cardHeight={metrics.featureCardHeight} compact={metrics.compact} items={featureItems} onSelect={handleFeaturePress} palette={palette} />
           </View>
-
-          <View style={{ height: metrics.bottomHeight }}>
-            <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
-          </View>
         </Animated.View>
       </SafeAreaView>
+
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.bottomBarWrap,
+          {
+            bottom: metrics.tabBarOffset,
+            paddingHorizontal: metrics.sidePadding,
+          },
+        ]}
+      >
+        <View style={[styles.bottomBarInner, { height: metrics.tabBarHeight }]}>
+          <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
+        </View>
+      </View>
 
       <DrawerMenu
         avatar={avatar}
@@ -580,5 +598,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 0 },
+  },
+  bottomBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  bottomBarInner: {
+    width: '100%',
+    maxWidth: layout.maxWidth,
+    alignSelf: 'center',
   },
 });
