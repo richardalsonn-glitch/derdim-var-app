@@ -93,6 +93,8 @@ export type FriendRequestDirection = 'incoming' | 'outgoing';
 
 export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected';
 
+export type UiTheme = 'dark' | 'light';
+
 export type FriendSummary = {
   id: string;
   username: string;

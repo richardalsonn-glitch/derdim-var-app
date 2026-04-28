@@ -1,108 +1,242 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
-import { ChoiceChip } from '../components/ChoiceChip';
-import { GlassCard } from '../components/GlassCard';
+import { ActionCard } from '../components/home/ActionCard';
+import { AutoCallCard } from '../components/home/AutoCallCard';
+import { BottomTabBar, BottomTabItem } from '../components/home/BottomTabBar';
+import { DrawerMenu } from '../components/home/DrawerMenu';
+import { FeatureGrid } from '../components/home/FeatureGrid';
+import { ProfileCard } from '../components/home/ProfileCard';
+import { ThemeToggle } from '../components/home/ThemeToggle';
+import { DrawerItem, FeatureItem, HomePalette } from '../components/home/types';
 import { NoticeModal } from '../components/NoticeModal';
-import { PremiumScreen } from '../components/PremiumScreen';
-import { colors, gradients, radius, shadows, spacing } from '../constants/theme';
+import { colors, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { getAvatarById, helpedToday, moodOptions } from '../data/mockData';
+import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { requestMicrophonePermission } from '../services/permissionsService';
-import { MatchRole } from '../types';
+import { MatchRole, UiTheme } from '../types';
 
 const AUTO_CALL_SECONDS = 45;
 
-const menuItems = [
-  { label: 'Profil', icon: 'person' as const, route: 'Profile' as const },
-  { label: 'Anonim Mektup Kutusu', icon: 'mail' as const, route: 'Letters' as const },
-  { label: 'Paketler', icon: 'diamond' as const, route: 'Packages' as const },
-  { label: 'Tekrar Eşleşme', icon: 'refresh' as const, route: 'Rematch' as const },
-  { label: 'Rozet Sistemi', icon: 'ribbon' as const, route: 'Badges' as const },
-  { label: 'Ayarlar', icon: 'settings' as const, route: 'Settings' as const },
-  { label: 'Çıkış', icon: 'log-out' as const, route: 'Login' as const },
+type PendingAction =
+  | { type: 'role'; role: MatchRole }
+  | { type: 'route'; route: 'NightMode' | 'SilentScream' }
+  | null;
+
+type HomeMetrics = {
+  compact: boolean;
+  short: boolean;
+  sidePadding: number;
+  topPadding: number;
+  bottomPadding: number;
+  gap: number;
+  topHeight: number;
+  profileHeight: number;
+  ctaBlockHeight: number;
+  autoHeight: number;
+  featureBlockHeight: number;
+  featureCardHeight: number;
+  bottomHeight: number;
+  iconButton: number;
+};
+
+const drawerItems: DrawerItem[] = [
+  { key: 'home', label: 'Ana Sayfa', icon: 'home' },
+  { key: 'profile', label: 'Profilim', icon: 'person' },
+  { key: 'chats', label: 'Sohbetler', icon: 'chatbubbles' },
+  { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
+  { key: 'notifications', label: 'Bildirimler', icon: 'notifications' },
+  { key: 'packages', label: 'Paketler', icon: 'diamond' },
+  { key: 'badges', label: 'Rozetler', icon: 'shield-half' },
+  { key: 'settings', label: 'Ayarlar', icon: 'settings' },
+  { key: 'logout', label: 'Çıkış Yap', icon: 'log-out' },
 ];
 
-type MenuRoute = (typeof menuItems)[number]['route'];
+const bottomTabs: BottomTabItem[] = [
+  { key: 'home', label: 'Ana Sayfa', icon: 'home' },
+  { key: 'chats', label: 'Sohbetler', icon: 'chatbox-ellipses' },
+  { key: 'gifts', label: 'Hediyeler', icon: 'gift' },
+  { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
+  { key: 'notifications', label: 'Bildirimler', icon: 'notifications' },
+];
 
-type PrimaryActionCardProps = {
-  title: string;
-  subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  gradientColors: readonly [string, string, string];
-  onPress: () => void;
-};
-
-type QuickActionCardProps = {
-  title: string;
-  subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-};
-
-function formatAutoCallLabel(seconds: number) {
-  return `${seconds} sn sonra otomatik çağrı`;
+function formatAutoCall(seconds: number) {
+  return `00:${String(seconds).padStart(2, '0')}`;
 }
 
-function PrimaryActionCard({ title, subtitle, icon, gradientColors, onPress }: PrimaryActionCardProps) {
-  return (
-    <Pressable onPress={onPress} style={styles.primaryCardPressable}>
-      <LinearGradient colors={[...gradientColors]} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.primaryCard}>
-        <View style={styles.primaryCardTop}>
-          <View style={styles.primaryIconWrap}>
-            <Ionicons color={colors.text} name={icon} size={24} />
-          </View>
-          <Ionicons color={colors.text} name="arrow-forward" size={18} />
-        </View>
-        <View style={styles.primaryCopy}>
-          <Text style={styles.primaryTitle}>{title}</Text>
-          <Text style={styles.primarySubtitle}>{subtitle}</Text>
-        </View>
-      </LinearGradient>
-    </Pressable>
-  );
+function getPalette(theme: UiTheme): HomePalette {
+  if (theme === 'light') {
+    return {
+      theme,
+      background: ['#140C21', '#241537', '#30184A'],
+      orbPrimary: 'rgba(255, 98, 193, 0.18)',
+      orbSecondary: 'rgba(87, 164, 255, 0.18)',
+      surface: 'rgba(255,255,255,0.10)',
+      surfaceStrong: 'rgba(22, 16, 48, 0.94)',
+      border: 'rgba(255,255,255,0.16)',
+      text: '#FFF7FF',
+      muted: '#DBC7F3',
+      dim: '#B49ECB',
+      pink: '#FF63C8',
+      purple: '#A64BFF',
+      blue: '#4E87FF',
+      cyan: '#59D0FF',
+      gold: '#FFD36B',
+      green: '#40F080',
+      tabInactive: '#BCAFD2',
+      shadow: 'rgba(127, 74, 255, 0.38)',
+    };
+  }
+
+  return {
+    theme,
+    background: ['#040713', '#090B20', '#110822'],
+    orbPrimary: 'rgba(255, 79, 185, 0.16)',
+    orbSecondary: 'rgba(69, 224, 255, 0.14)',
+    surface: 'rgba(255,255,255,0.08)',
+    surfaceStrong: 'rgba(11, 13, 35, 0.92)',
+    border: 'rgba(190, 132, 255, 0.18)',
+    text: '#F8EFFF',
+    muted: '#BBB5D8',
+    dim: '#7F7BA1',
+    pink: '#FF4FB9',
+    purple: '#9C49FF',
+    blue: '#4E83FF',
+    cyan: '#50D5FF',
+    gold: '#FFD36B',
+    green: '#36F07B',
+    tabInactive: '#ABA6C5',
+    shadow: 'rgba(101, 50, 194, 0.42)',
+  };
 }
 
-function QuickActionCard({ title, subtitle, icon, onPress }: QuickActionCardProps) {
-  return (
-    <Pressable onPress={onPress} style={styles.quickCardWrap}>
-      <GlassCard style={styles.quickCard}>
-        <View style={styles.quickCardTop}>
-          <View style={styles.quickIconWrap}>
-            <Ionicons color={colors.text} name={icon} size={18} />
-          </View>
-          <Ionicons color={colors.muted} name="chevron-forward" size={16} />
-        </View>
-        <Text style={styles.quickTitle}>{title}</Text>
-        <Text style={styles.quickSubtitle}>{subtitle}</Text>
-      </GlassCard>
-    </Pressable>
-  );
+function getFeatureItems(): FeatureItem[] {
+  return [
+    {
+      key: 'night',
+      title: 'Gece Modu',
+      subtitle: '22:00 - 06:00',
+      icon: 'moon',
+      accent: '#F5C84D',
+      glow: 'rgba(245, 200, 77, 0.3)',
+    },
+    {
+      key: 'silent',
+      title: 'Dert Sıra Gecesi',
+      subtitle: 'En az 4 katılımcı gerekir',
+      icon: 'mic',
+      accent: '#FF5BB2',
+      glow: 'rgba(255, 91, 178, 0.28)',
+    },
+    {
+      key: 'packages',
+      title: 'Paketler',
+      subtitle: 'Plus ve VIP paketleri incele',
+      icon: 'diamond',
+      accent: '#5DAFFF',
+      glow: 'rgba(93, 175, 255, 0.26)',
+    },
+    {
+      key: 'rematch',
+      title: 'Tekrar Eşleşme',
+      subtitle: 'Kaçırdığın kişiyi tekrar bul',
+      icon: 'refresh',
+      accent: '#6AF2BD',
+      glow: 'rgba(106, 242, 189, 0.24)',
+    },
+    {
+      key: 'badges',
+      title: 'Rozet Sistemi',
+      subtitle: 'Level atla, rozetleri topla',
+      icon: 'shield-half',
+      accent: '#AF70FF',
+      glow: 'rgba(175, 112, 255, 0.28)',
+    },
+    {
+      key: 'letters',
+      title: 'Anonim Mektup Kutusu',
+      subtitle: 'Sana gelen iyi dilekler',
+      icon: 'mail',
+      accent: '#FF79C7',
+      glow: 'rgba(255, 121, 199, 0.26)',
+    },
+  ];
+}
+
+function getMetrics(width: number, height: number, insetsTop: number, insetsBottom: number): HomeMetrics {
+  const compact = width < 380;
+  const short = height < 760;
+  const sidePadding = compact ? 12 : 16;
+  const topPadding = 8;
+  const bottomPadding = short ? 8 : 12;
+  const gap = short ? 8 : 10;
+  const available = height - insetsTop - insetsBottom - topPadding - bottomPadding - gap * 5;
+  const topHeight = Math.round(Math.min(60, Math.max(50, available * 0.075)));
+  const profileHeight = Math.round(Math.min(156, Math.max(132, available * 0.18)));
+  const ctaBlockHeight = Math.round(Math.min(246, Math.max(198, available * 0.255)));
+  const autoHeight = Math.round(Math.min(90, Math.max(74, available * 0.11)));
+  const bottomHeight = Math.round(Math.min(90, Math.max(74, available * 0.11)));
+  const featureBlockHeight = available - topHeight - profileHeight - ctaBlockHeight - autoHeight - bottomHeight;
+  const featureCardHeight = Math.floor((featureBlockHeight - gap * 2) / 3);
+
+  return {
+    compact,
+    short,
+    sidePadding,
+    topPadding,
+    bottomPadding,
+    gap,
+    topHeight,
+    profileHeight,
+    ctaBlockHeight,
+    autoHeight,
+    featureBlockHeight,
+    featureCardHeight,
+    bottomHeight,
+    iconButton: compact ? 42 : 48,
+  };
 }
 
 export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
-  const { profile, setActiveRole, updateProfile, setAutoCallEnabled, userScore, userLevel } = useAppState();
-  const [selectedMood, setSelectedMood] = useState(profile.mood);
-  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
-  const [pendingRole, setPendingRole] = useState<MatchRole | null>(null);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [autoCallCountdown, setAutoCallCountdown] = useState(AUTO_CALL_SECONDS);
-  const isFocused = useIsFocused();
+  const {
+    profile,
+    setActiveRole,
+    setAutoCallEnabled,
+    uiTheme,
+    toggleUiTheme,
+    userScore,
+    userLevel,
+  } = useAppState();
+  const palette = useMemo(() => getPalette(uiTheme), [uiTheme]);
   const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
-
-  const resetAutoCall = () => {
-    if (profile.autoCallEnabled) {
-      setAutoCallCountdown(AUTO_CALL_SECONDS);
-    }
-  };
+  const featureItems = useMemo(() => getFeatureItems(), []);
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const metrics = useMemo(() => getMetrics(width, height, insets.top, insets.bottom), [height, insets.bottom, insets.top, width]);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [autoCallCountdown, setAutoCallCountdown] = useState(AUTO_CALL_SECONDS);
+  const [permissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [comingSoonVisible, setComingSoonVisible] = useState(false);
+  const [comingSoonTitle, setComingSoonTitle] = useState('Bu alan');
+  const [activeTab, setActiveTab] = useState('home');
+  const fadeValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!profile.autoCallEnabled || !isFocused) {
+    Animated.timing(fadeValue, {
+      toValue: 1,
+      duration: 420,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeValue]);
+
+  useEffect(() => {
+    if (!profile.autoCallEnabled) {
       return;
     }
 
@@ -117,635 +251,334 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }, 1000);
 
     return () => clearTimeout(timerId);
-  }, [autoCallCountdown, isFocused, navigation, profile.autoCallEnabled]);
+  }, [autoCallCountdown, navigation, profile.autoCallEnabled]);
 
   useEffect(() => {
-    if (profile.autoCallEnabled && isFocused) {
+    if (profile.autoCallEnabled) {
       setAutoCallCountdown(AUTO_CALL_SECONDS);
     }
-  }, [isFocused, profile.autoCallEnabled]);
+  }, [profile.autoCallEnabled]);
 
-  const proceedToMatching = (role: MatchRole) => {
-    setActiveRole(role);
-    updateProfile({ mood: selectedMood });
-    resetAutoCall();
-    navigation.navigate('VoiceCall');
-  };
+  function resetAutoCall() {
+    if (profile.autoCallEnabled) {
+      setAutoCallCountdown(AUTO_CALL_SECONDS);
+    }
+  }
 
-  const startVoiceFlow = async (role: MatchRole) => {
+  async function openVoiceRole(role: MatchRole) {
     resetAutoCall();
-    setPendingRole(role);
+    setPendingAction({ type: 'role', role });
     const result = await requestMicrophonePermission();
 
-    if (result.granted) {
-      proceedToMatching(role);
+    if (!result.granted) {
+      setPermissionModalVisible(true);
       return;
     }
 
-    setPermissionModalVisible(true);
-  };
+    setActiveRole(role);
+    navigation.navigate('VoiceCall');
+  }
 
-  const navigateMenu = (route: MenuRoute) => {
-    setMenuVisible(false);
+  async function openVoiceFeature(route: 'NightMode' | 'SilentScream') {
     resetAutoCall();
+    setPendingAction({ type: 'route', route });
 
-    if (route === 'Login') {
-      navigation.replace('Login');
-      return;
+    if (route === 'NightMode') {
+      const result = await requestMicrophonePermission();
+
+      if (!result.granted) {
+        setPermissionModalVisible(true);
+        return;
+      }
     }
 
     navigation.navigate(route);
-  };
+  }
+
+  function showComingSoon(title: string) {
+    setComingSoonTitle(title);
+    setComingSoonVisible(true);
+  }
+
+  function handleFeaturePress(item: FeatureItem) {
+    resetAutoCall();
+
+    switch (item.key) {
+      case 'night':
+        void openVoiceFeature('NightMode');
+        break;
+      case 'silent':
+        void openVoiceFeature('SilentScream');
+        break;
+      case 'packages':
+        navigation.navigate('Packages');
+        break;
+      case 'rematch':
+        navigation.navigate('Rematch');
+        break;
+      case 'badges':
+        navigation.navigate('Badges');
+        break;
+      case 'letters':
+        navigation.navigate('Letters');
+        break;
+      default:
+        showComingSoon(item.title);
+    }
+  }
+
+  function handleDrawerSelect(item: DrawerItem) {
+    setDrawerVisible(false);
+    resetAutoCall();
+
+    switch (item.key) {
+      case 'home':
+        return;
+      case 'profile':
+        navigation.navigate('Profile');
+        return;
+      case 'friends':
+        navigation.navigate('Profile');
+        return;
+      case 'packages':
+        navigation.navigate('Packages');
+        return;
+      case 'badges':
+        navigation.navigate('Badges');
+        return;
+      case 'settings':
+        navigation.navigate('Settings');
+        return;
+      case 'logout':
+        navigation.replace('Login');
+        return;
+      default:
+        showComingSoon(item.label);
+    }
+  }
+
+  function handleBottomTabSelect(item: BottomTabItem) {
+    setActiveTab(item.key);
+    resetAutoCall();
+
+    switch (item.key) {
+      case 'home':
+        return;
+      case 'friends':
+        navigation.navigate('Profile');
+        return;
+      default:
+        showComingSoon(item.label);
+    }
+  }
+
+  async function retryPendingAction() {
+    setPermissionModalVisible(false);
+
+    if (!pendingAction) {
+      return;
+    }
+
+    if (pendingAction.type === 'role') {
+      await openVoiceRole(pendingAction.role);
+      return;
+    }
+
+    await openVoiceFeature(pendingAction.route);
+  }
+
+  const profileData = {
+    username: profile.username,
+    plan: profile.plan,
+    score: userScore / 20,
+    level: userLevel,
+    progress: Math.max(0.14, Math.min(0.96, (userScore % 100) / 100 || 0.65)),
+    message: 'Bugün sana iyi gelecek birisini bulabilirsin.',
+  } as const;
+
+  const ctaHeight = Math.floor((metrics.ctaBlockHeight - metrics.gap) / 2);
 
   return (
-    <PremiumScreen contentStyle={styles.content}>
-      <View style={styles.page}>
-        <View style={styles.topRow}>
-          <Pressable
-            onPress={() => {
-              resetAutoCall();
-              navigation.navigate('Profile');
-            }}
-            style={styles.profileChip}
-          >
-            <Avatar avatar={avatar} size={48} />
-            <View style={styles.profileChipCopy}>
-              <Text numberOfLines={1} style={styles.alias}>
-                {profile.username}
-              </Text>
-              <Text style={styles.profileChipMeta}>
-                Level {userLevel} • {profile.plan.toUpperCase()}
-              </Text>
-            </View>
-          </Pressable>
+    <LinearGradient colors={[...palette.background]} style={styles.screen}>
+      <View pointerEvents="none" style={[styles.orb, styles.orbTop, { backgroundColor: palette.orbPrimary }]} />
+      <View pointerEvents="none" style={[styles.orb, styles.orbRight, { backgroundColor: palette.orbSecondary }]} />
+      <View pointerEvents="none" style={[styles.orb, styles.orbBottom, { backgroundColor: palette.orbPrimary }]} />
 
-          <Pressable
-            onPress={() => {
-              resetAutoCall();
-              setMenuVisible(true);
-            }}
-            style={styles.menuButton}
-          >
-            <Ionicons color={colors.text} name="menu" size={18} />
-          </Pressable>
-        </View>
-
-        <GlassCard style={styles.heroCard} toned="strong">
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroEyebrow}>Bugün</Text>
-            <Text style={styles.heroTitle}>Bugün sana iyi gelecek biri var.</Text>
-            <Text style={styles.heroSubtitle}>Anonim kal, içini dök ya da birine derman ol.</Text>
-          </View>
-
-          <LinearGradient colors={[...gradients.surface]} style={styles.todayPill}>
-            <Ionicons color={colors.cyan} name="sparkles" size={16} />
-            <Text style={styles.todayText}>Bugün {helpedToday} kişiye iyi geldin</Text>
-          </LinearGradient>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statChip}>
-              <Text style={styles.statValue}>{userScore}</Text>
-              <Text style={styles.statLabel}>Derman Puanı</Text>
-            </View>
-            <View style={styles.statChip}>
-              <Text style={styles.statValue}>Level {userLevel}</Text>
-              <Text style={styles.statLabel}>İyilik Seviyesi</Text>
-            </View>
-          </View>
-        </GlassCard>
-
-        <View style={styles.primaryGrid}>
-          <PrimaryActionCard
-            gradientColors={gradients.primary}
-            icon="heart"
-            onPress={() => startVoiceFlow('derdim-var')}
-            subtitle="İçimi dökmek istiyorum"
-            title="Derdim Var"
-          />
-          <PrimaryActionCard
-            gradientColors={['#25307A', '#4D57FF', '#45E0FF']}
-            icon="headset"
-            onPress={() => startVoiceFlow('derman-olan')}
-            subtitle="Birini dinlemek istiyorum"
-            title="Derman Ol"
-          />
-        </View>
-
-        <View style={styles.quickGrid}>
-          <QuickActionCard
-            icon="moon"
-            onPress={async () => {
-              resetAutoCall();
-              const result = await requestMicrophonePermission();
-              if (!result.granted) {
-                setPendingRole('derdim-var');
-                setPermissionModalVisible(true);
-                return;
-              }
-              navigation.navigate('NightMode');
-            }}
-            subtitle="22:00 - 02:00"
-            title="Gece Modu"
-          />
-          <QuickActionCard
-            icon="mic"
-            onPress={() => {
-              resetAutoCall();
-              navigation.navigate('SilentScream');
-            }}
-            subtitle="Dert Sıra Gecesi"
-            title="Sessiz Çığlık"
-          />
-          <QuickActionCard
-            icon="mail"
-            onPress={() => {
-              resetAutoCall();
-              navigation.navigate('Letters');
-            }}
-            subtitle="Mektup Kutun"
-            title="Anonim Mektup Kutusu"
-          />
-          <QuickActionCard
-            icon="diamond"
-            onPress={() => {
-              resetAutoCall();
-              navigation.navigate('Packages');
-            }}
-            subtitle="Planını güçlendir"
-            title="Paketler"
-          />
-          <QuickActionCard
-            icon="refresh"
-            onPress={() => {
-              resetAutoCall();
-              navigation.navigate('Rematch');
-            }}
-            subtitle="Tanıdık biri çıksın"
-            title="Tekrar Eşleşme"
-          />
-          <QuickActionCard
-            icon="ribbon"
-            onPress={() => {
-              resetAutoCall();
-              navigation.navigate('Badges');
-            }}
-            subtitle="Seviyeni büyüt"
-            title="Rozet Sistemi"
-          />
-        </View>
-
-        <GlassCard style={styles.autoCallCard}>
-          <View style={styles.autoCallHeader}>
-            <View style={styles.autoCallCopy}>
-              <Text style={styles.autoCallTitle}>Otomatik çağrı al</Text>
-              <Text style={styles.autoCallSubtitle}>45 sn işlem yapmazsan seni uygun bir ses odasına bağlarız.</Text>
-            </View>
+      <SafeAreaView style={styles.safeArea}>
+        <Animated.View
+          style={[
+            styles.page,
+            {
+              paddingHorizontal: metrics.sidePadding,
+              paddingTop: metrics.topPadding,
+              paddingBottom: metrics.bottomPadding,
+              gap: metrics.gap,
+              opacity: fadeValue,
+              transform: [
+                {
+                  translateY: fadeValue.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [18, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <View style={[styles.topBar, { height: metrics.topHeight }]}>
             <Pressable
               onPress={() => {
+                resetAutoCall();
+                setDrawerVisible(true);
+              }}
+              style={[
+                styles.iconButton,
+                {
+                  width: metrics.iconButton,
+                  height: metrics.iconButton,
+                  borderRadius: metrics.iconButton / 2,
+                  borderColor: palette.border,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+            >
+              <Ionicons color={palette.text} name="menu" size={22} />
+            </Pressable>
+
+            <ThemeToggle compact={metrics.compact} mode={uiTheme} onToggle={toggleUiTheme} palette={palette} />
+          </View>
+
+          <View style={{ height: metrics.profileHeight }}>
+            <ProfileCard avatar={avatar} compact={metrics.compact} data={profileData} onPress={() => navigation.navigate('Profile')} palette={palette} />
+          </View>
+
+          <View style={{ height: metrics.ctaBlockHeight, gap: metrics.gap }}>
+            <ActionCard
+              compact={metrics.compact}
+              glowColor="rgba(255, 86, 180, 0.34)"
+              gradient={['#FF4A7A', '#FF3FA7', '#9426C8']}
+              height={ctaHeight}
+              icon="heart"
+              onPress={() => void openVoiceRole('derdim-var')}
+              palette={palette}
+              subtitle="İçimi dökmek istiyorum"
+              title="DERDİM VAR"
+            />
+            <ActionCard
+              compact={metrics.compact}
+              glowColor="rgba(79, 131, 255, 0.3)"
+              gradient={['#8A3CFF', '#5D34FF', '#245CFF']}
+              height={ctaHeight}
+              icon="headset"
+              onPress={() => void openVoiceRole('derman-olan')}
+              palette={palette}
+              subtitle="Birini dinlemek istiyorum"
+              title="DERMAN OL"
+            />
+          </View>
+
+          <View style={{ height: metrics.autoHeight }}>
+            <AutoCallCard
+              compact={metrics.compact}
+              counterLabel={profile.autoCallEnabled ? formatAutoCall(autoCallCountdown) : 'Kapalı'}
+              enabled={profile.autoCallEnabled}
+              onToggle={() => {
                 setAutoCallEnabled(!profile.autoCallEnabled);
                 setAutoCallCountdown(AUTO_CALL_SECONDS);
               }}
-              style={[styles.autoCallSwitch, profile.autoCallEnabled && styles.autoCallSwitchActive]}
-            >
-              <View style={[styles.autoCallKnob, profile.autoCallEnabled && styles.autoCallKnobActive]} />
-            </Pressable>
+              palette={palette}
+            />
           </View>
 
-          <View style={styles.autoCallFooter}>
-            <Text style={styles.autoCallCounter}>{profile.autoCallEnabled ? formatAutoCallLabel(autoCallCountdown) : 'Kapalı'}</Text>
-            <Text style={styles.autoCallMeta}>Süre sabit: 45 sn</Text>
+          <View style={{ height: metrics.featureBlockHeight }}>
+            <FeatureGrid cardHeight={metrics.featureCardHeight} compact={metrics.compact} items={featureItems} onSelect={handleFeaturePress} palette={palette} />
           </View>
-        </GlassCard>
 
-        <GlassCard style={styles.moodCard}>
-          <Text style={styles.moodTitle}>Bugün ruh halin ne?</Text>
-          <View style={styles.moodRow}>
-            {moodOptions.map((mood) => (
-              <ChoiceChip
-                key={mood}
-                label={mood}
-                onPress={() => {
-                  resetAutoCall();
-                  setSelectedMood(mood);
-                  updateProfile({ mood });
-                }}
-                selected={selectedMood === mood}
-              />
-            ))}
+          <View style={{ height: metrics.bottomHeight }}>
+            <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
           </View>
-        </GlassCard>
-      </View>
+        </Animated.View>
+      </SafeAreaView>
 
-      <Modal animationType="slide" onRequestClose={() => setMenuVisible(false)} statusBarTranslucent transparent visible={menuVisible}>
-        <View style={styles.sheetBackdrop}>
-          <Pressable onPress={() => setMenuVisible(false)} style={StyleSheet.absoluteFill} />
-          <LinearGradient colors={['rgba(17, 20, 50, 0.98)', 'rgba(9, 11, 28, 0.98)']} style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetTopRow}>
-              <View style={styles.sheetIdentity}>
-                <Avatar avatar={avatar} size={56} />
-                <View style={styles.sheetIdentityCopy}>
-                  <Text style={styles.sheetTitle}>{profile.username}</Text>
-                  <Text style={styles.sheetSubtitle}>
-                    {profile.plan.toUpperCase()} • Level {userLevel} • {userScore} puan
-                  </Text>
-                </View>
-              </View>
-              <Pressable onPress={() => setMenuVisible(false)} style={styles.sheetCloseButton}>
-                <Ionicons color={colors.text} name="close" size={18} />
-              </Pressable>
-            </View>
-
-            <View style={styles.sheetMenuList}>
-              {menuItems.map((item) => (
-                <Pressable key={item.label} onPress={() => navigateMenu(item.route)} style={styles.sheetMenuItem}>
-                  <View style={styles.sheetMenuIcon}>
-                    <Ionicons color={colors.text} name={item.icon} size={18} />
-                  </View>
-                  <Text style={styles.sheetMenuLabel}>{item.label}</Text>
-                  <Ionicons color={colors.muted} name="chevron-forward" size={16} />
-                </Pressable>
-              ))}
-            </View>
-          </LinearGradient>
-        </View>
-      </Modal>
+      <DrawerMenu
+        avatar={avatar}
+        items={drawerItems}
+        onClose={() => setDrawerVisible(false)}
+        onSelect={handleDrawerSelect}
+        palette={palette}
+        planLabel={`${profile.plan.toUpperCase()} • Level ${userLevel}`}
+        username={profile.username}
+        visible={drawerVisible}
+      />
 
       <NoticeModal
         actions={[
-          {
-            label: 'Tekrar Dene',
-            onPress: async () => {
-              setPermissionModalVisible(false);
-              if (pendingRole) {
-                await startVoiceFlow(pendingRole);
-              }
-            },
-          },
-          {
-            label: 'Şimdilik Vazgeç',
-            onPress: () => setPermissionModalVisible(false),
-            variant: 'ghost',
-          },
+          { label: 'Tekrar Dene', onPress: () => void retryPendingAction(), variant: 'secondary' },
+          { label: 'Şimdilik Vazgeç', onPress: () => setPermissionModalVisible(false), variant: 'ghost' },
         ]}
-        message="Sesli görüşme için mikrofon izni gerekli."
+        message="Sesli deneyim için mikrofon izni gerekli."
         title="Mikrofon izni gerekli"
         visible={permissionModalVisible}
       />
-    </PremiumScreen>
+
+      <NoticeModal
+        actions={[{ label: 'Tamam', onPress: () => setComingSoonVisible(false), variant: 'secondary' }]}
+        message={`${comingSoonTitle} bölümü sonraki revizyonda tam ekran olarak bağlanacak.`}
+        title="Yakında"
+        visible={comingSoonVisible}
+      />
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: spacing.md,
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   page: {
-    gap: spacing.md,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  profileChip: {
     flex: 1,
-    minHeight: 64,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  profileChipCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  alias: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  profileChipMeta: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  menuButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  heroCard: {
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  heroCopy: {
-    gap: 6,
-  },
-  heroEyebrow: {
-    color: colors.cyan,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  heroTitle: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 34,
-  },
-  heroSubtitle: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  todayPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignSelf: 'flex-start',
-  },
-  todayText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  statChip: {
-    flex: 1,
-    minHeight: 64,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  statValue: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  statLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  primaryGrid: {
-    gap: spacing.sm,
-  },
-  primaryCardPressable: {
-    borderRadius: radius.xl,
-    ...shadows.glow,
-  },
-  primaryCard: {
-    minHeight: 132,
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    justifyContent: 'space-between',
-  },
-  primaryCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  primaryIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  primaryCopy: {
-    gap: 4,
-  },
-  primaryTitle: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  primarySubtitle: {
-    color: 'rgba(247, 238, 255, 0.86)',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: spacing.sm,
-  },
-  quickCardWrap: {
-    width: '48%',
-  },
-  quickCard: {
-    minHeight: 124,
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(16, 18, 48, 0.74)',
-  },
-  quickCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  quickIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  quickTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  quickSubtitle: {
-    color: colors.muted,
-    lineHeight: 18,
-    fontSize: 12,
-  },
-  autoCallCard: {
-    gap: spacing.sm,
-    backgroundColor: 'rgba(16, 18, 48, 0.72)',
-  },
-  autoCallHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  autoCallCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  autoCallTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  autoCallSubtitle: {
-    color: colors.muted,
-    lineHeight: 18,
-    fontSize: 12,
-  },
-  autoCallSwitch: {
-    width: 58,
-    height: 32,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 3,
-    justifyContent: 'center',
-  },
-  autoCallSwitchActive: {
-    backgroundColor: 'rgba(69, 224, 255, 0.18)',
-    borderColor: 'rgba(69, 224, 255, 0.38)',
-  },
-  autoCallKnob: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.text,
-  },
-  autoCallKnobActive: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.cyan,
-  },
-  autoCallFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  autoCallCounter: {
-    color: colors.cyan,
-    fontWeight: '700',
-  },
-  autoCallMeta: {
-    color: colors.dim,
-    fontSize: 12,
-  },
-  moodCard: {
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  moodTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  moodRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  sheetBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(2, 4, 12, 0.66)',
-  },
-  sheet: {
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    gap: spacing.md,
-  },
-  sheetHandle: {
+    width: '100%',
+    maxWidth: layout.maxWidth,
     alignSelf: 'center',
-    width: 58,
-    height: 5,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  sheetTopRow: {
+  orb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  orbTop: {
+    top: -90,
+    left: -40,
+    width: 220,
+    height: 220,
+  },
+  orbRight: {
+    top: 160,
+    right: -80,
+    width: 240,
+    height: 240,
+  },
+  orbBottom: {
+    bottom: -50,
+    left: 20,
+    width: 200,
+    height: 200,
+  },
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md,
   },
-  sheetIdentity: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  sheetIdentityCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  sheetTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  sheetSubtitle: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  sheetCloseButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  iconButton: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  sheetMenuList: {
-    gap: 10,
-  },
-  sheetMenuItem: {
-    minHeight: 54,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sheetMenuIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  sheetMenuLabel: {
-    flex: 1,
-    color: colors.text,
-    fontWeight: '700',
+    shadowColor: '#A44DFF',
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
   },
 });

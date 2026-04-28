@@ -1,7 +1,7 @@
 import { PropsWithChildren, createContext, useContext, useMemo, useState } from 'react';
 
 import { defaultProfile, getAvatarById, topics } from './mockData';
-import { AppProfile, FriendRequestItem, FriendSummary, MatchRole, MembershipPlan, TopicTag } from '../types';
+import { AppProfile, FriendRequestItem, FriendSummary, MatchRole, MembershipPlan, TopicTag, UiTheme } from '../types';
 
 function getLevelFromScore(score: number) {
   if (score >= 500) {
@@ -50,12 +50,15 @@ type AppContextValue = {
   pendingIncomingFriendRequests: FriendRequestItem[];
   friends: FriendSummary[];
   countdownAlertsEnabled: boolean;
+  uiTheme: UiTheme;
   updateProfile: (patch: Partial<AppProfile>) => void;
   updateUsername: (username: string) => void;
   setPlan: (plan: MembershipPlan) => void;
   setAvatar: (avatarId: string) => void;
   setAutoCallEnabled: (value: boolean) => void;
   setCountdownAlertsEnabled: (value: boolean) => void;
+  setUiTheme: (value: UiTheme) => void;
+  toggleUiTheme: () => void;
   setActiveRole: (role: MatchRole) => void;
   setActiveTopic: (topic: TopicTag) => void;
   adjustScore: (delta: number) => void;
@@ -84,6 +87,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [friendRequests, setFriendRequests] = useState<FriendRequestItem[]>([]);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [countdownAlertsEnabled, setCountdownAlertsEnabled] = useState(true);
+  const [uiTheme, setUiTheme] = useState<UiTheme>('dark');
   const userLevel = getLevelFromScore(userScore);
   const effectiveUsage = dailyAppreciationUsage.dateKey === getTodayKey() ? dailyAppreciationUsage.used : 0;
   const dailyAppreciationLimit = getDailyAppreciationLimit(profile.plan);
@@ -105,6 +109,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       pendingIncomingFriendRequests,
       friends,
       countdownAlertsEnabled,
+      uiTheme,
       updateProfile: (patch) => {
         setProfile((current) => {
           const next = { ...current, ...patch };
@@ -133,6 +138,10 @@ export function AppProvider({ children }: PropsWithChildren) {
         setProfile((current) => ({ ...current, autoCallEnabled: value }));
       },
       setCountdownAlertsEnabled,
+      setUiTheme,
+      toggleUiTheme: () => {
+        setUiTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+      },
       setActiveRole,
       setActiveTopic,
       adjustScore: (delta) => {
@@ -257,6 +266,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       pendingIncomingFriendRequests,
       profile,
       skipCount,
+      uiTheme,
       userLevel,
       userScore,
     ],
