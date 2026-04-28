@@ -9,7 +9,6 @@ import { ChoiceChip } from '../components/ChoiceChip';
 import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GlassCard } from '../components/GlassCard';
 import { GiftCelebrationOverlay, GiftModal } from '../components/GiftModal';
-import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -19,11 +18,16 @@ import { avatarOptions, getAvatarById, giftBonusByPlan, planDurations, roleLabel
 import { AppScreenProps } from '../navigation/types';
 import { GiftItem } from '../types';
 
-// TODO: Supabase Realtime / WebRTC sesli eşleşme bağlanacak
-// TODO: RevenueCat / In-App Purchase bağlanacak
-// TODO: Moderasyon ve şikayet paneli bağlanacak
-
 type CallPhase = 'searching' | 'matched' | 'ended';
+
+type RoomControlProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  active?: boolean;
+};
 
 function getSearchBias(skipCount: number) {
   if (skipCount === 1) {
@@ -39,6 +43,26 @@ function getSearchBias(skipCount: number) {
   }
 
   return 0;
+}
+
+function RoomControl({ icon, label, onPress, disabled = false, danger = false, active = false }: RoomControlProps) {
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={[
+        styles.controlCard,
+        active && styles.controlCardActive,
+        danger && styles.controlCardDanger,
+        disabled && styles.controlCardDisabled,
+      ]}
+    >
+      <View style={[styles.controlIconWrap, active && styles.controlIconWrapActive, danger && styles.controlIconWrapDanger]}>
+        <Ionicons color={colors.text} name={icon} size={20} />
+      </View>
+      <Text style={styles.controlLabel}>{label}</Text>
+    </Pressable>
+  );
 }
 
 export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
@@ -65,6 +89,7 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
   const [callPhase, setCallPhase] = useState<CallPhase>('searching');
   const [searchRemaining, setSearchRemaining] = useState(4);
   const isFocused = useIsFocused();
+  const isMatched = callPhase === 'matched';
 
   const totalSeconds = planDurations[profile.plan];
   const bonusSeconds = giftBonusByPlan[profile.plan];
@@ -114,6 +139,9 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
   }, [isFocused, searchSession, setIsRunning]);
 
   const restartSearch = () => {
+    setSelectedGift(null);
+    setCelebrationVisible(false);
+    setMicEnabled(true);
     setSearchSession((current) => current + 1);
   };
 
@@ -140,16 +168,11 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
   };
 
   return (
-    <PremiumScreen contentStyle={styles.content} scroll={false}>
+    <PremiumScreen contentStyle={styles.content}>
       <ScreenHeader
         onBack={() => navigation.goBack()}
-        rightAction={
-          <Pressable onPress={() => setSafetyModalVisible(true)} style={styles.reportPill}>
-            <Text style={styles.reportText}>Şikayet et / Engelle</Text>
-          </Pressable>
-        }
-        subtitle="Anonim sesli görüşme"
-        title="Ses Odası Hazırlanıyor"
+        subtitle={isMatched ? 'Anonim ses odası başladı' : 'Seni anlayacak biri aranıyor'}
+        title={isMatched ? 'Ses Odası' : 'Eşleşme Aranıyor'}
       />
 
       <View style={styles.body}>
@@ -165,12 +188,12 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
         </GlassCard>
 
         <GlassCard style={styles.matchCard} toned="strong">
-          {callPhase === 'searching' ? (
+          {!isMatched ? (
             <>
-              <Text style={styles.sectionLabel}>Otomatik eşleştiriliyor...</Text>
+              <Text style={styles.sectionLabel}>Otomatik eşleştiriliyor</Text>
               <CountdownRing caption="eşleşme aranıyor" remainingSeconds={searchRemaining} size={176} totalSeconds={4} tone="blue" />
               <Text style={styles.searchTitle}>Seni anlayacak biri aranıyor...</Text>
-              <Text style={styles.searchMeta}>İstersen bir konu seç. Yeni üyeler yüksek puanlı aktif kullanıcılarla öncelikli eşleşir.</Text>
+              <Text style={styles.searchMeta}>İstersen bir konu seç. Kullanıcı bulunduğu anda aynı ekranda ses odası başlayacak.</Text>
             </>
           ) : (
             <>
@@ -182,7 +205,7 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
                   <BadgePill
                     badge={{
                       id: `${profile.plan}-badge`,
-                      name: profile.plan === 'vip' ? 'VIP rozeti' : profile.plan === 'plus' ? 'Mavi şimşek' : 'Standart',
+                      name: profile.plan === 'vip' ? 'VIP rozeti' : profile.plan === 'plus' ? 'Mavi Şimşek' : 'Standart',
                       description: '',
                       icon: profile.plan === 'vip' ? 'star' : 'flash',
                       gradient: profile.plan === 'vip' ? ['#D8B24C', '#B97A13'] : ['#357CFF', '#7E54FF'],
@@ -198,52 +221,39 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
               </View>
 
               <Text style={styles.connectedLabel}>Eşleşme bulundu, görüşme başladı.</Text>
-              <CountdownRing caption="kalan süre" remainingSeconds={remainingSeconds} size={204} totalSeconds={totalSeconds} />
+              <CountdownRing
+                caption="kalan süre"
+                remainingSeconds={remainingSeconds}
+                size={204}
+                totalSeconds={Math.max(totalSeconds, remainingSeconds)}
+              />
             </>
           )}
 
-          {callPhase === 'matched' ? (
-            <View style={styles.actionRow}>
-              <Pressable onPress={() => setFriendModalVisible(true)} style={styles.actionPill}>
-                <Ionicons color={colors.text} name="person-add" size={18} />
-              </Pressable>
-              <Pressable onPress={() => setSafetyModalVisible(true)} style={styles.actionPill}>
-                <Ionicons color={colors.text} name="shield-checkmark" size={18} />
-              </Pressable>
-              <Pressable onPress={handlePass} style={[styles.actionPill, styles.passPill]}>
-                <Ionicons color={colors.text} name="arrow-forward" size={18} />
-                <Text style={styles.passText}>Pas geç</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
           <View style={styles.topicHint}>
             <Ionicons color={colors.cyan} name="sparkles" size={16} />
-            <Text style={styles.topicHintText}>Konu etiketi: {activeTopic}</Text>
+            <Text style={styles.topicHintText}>
+              {isMatched
+                ? `Konu etiketi: ${activeTopic} • Hediye seçimi görüşmede süre bonusu verir.`
+                : `Konu etiketi: ${activeTopic} • Hediye ikonu eşleşme başlayınca aktifleşir.`}
+            </Text>
           </View>
         </GlassCard>
 
-        {callPhase === 'matched' ? (
-          <View style={styles.controls}>
-            <Pressable
-              disabled={callPhase !== 'matched'}
-              onPress={() => setMicEnabled((current) => !current)}
-              style={[styles.controlButton, micEnabled && styles.controlActive, callPhase !== 'matched' && styles.disabledControl]}
-            >
-              <Ionicons color={colors.text} name={micEnabled ? 'mic' : 'mic-off'} size={22} />
-            </Pressable>
-
-            <Pressable disabled={callPhase !== 'matched'} onPress={() => setGiftVisible(true)} style={[styles.controlButton, callPhase !== 'matched' && styles.disabledControl]}>
-              <Ionicons color={colors.text} name="gift" size={22} />
-            </Pressable>
-
-            <Pressable onPress={handleEndCall} style={[styles.controlButton, styles.endButton]}>
-              <Ionicons color={colors.text} name="call" size={22} style={styles.endIcon} />
-            </Pressable>
-          </View>
-        ) : null}
-
-        {callPhase === 'searching' ? <Text style={styles.helperText}>Bu ekran yazışma içermez; yalnızca ses odaklı demo akışı için tasarlandı.</Text> : null}
+        <View style={styles.controlsGrid}>
+          <RoomControl
+            active={isMatched && micEnabled}
+            disabled={!isMatched}
+            icon={isMatched && !micEnabled ? 'mic-off' : 'mic'}
+            label="Mikrofon"
+            onPress={() => setMicEnabled((current) => !current)}
+          />
+          <RoomControl disabled={!isMatched} icon="gift" label="Hediye" onPress={() => setGiftVisible(true)} />
+          <RoomControl danger icon="call" label="Bitir" onPress={isMatched ? handleEndCall : () => navigation.goBack()} />
+          <RoomControl disabled={!isMatched} icon="play-skip-forward" label="Pas Geç" onPress={handlePass} />
+          <RoomControl disabled={!isMatched} icon="person-add" label="Arkadaş Ekle" onPress={() => setFriendModalVisible(true)} />
+          <RoomControl icon="shield-checkmark" label="Şikayet Et" onPress={() => setSafetyModalVisible(true)} />
+        </View>
       </View>
 
       <GiftModal onClose={() => setGiftVisible(false)} onSelect={handleGiftSelect} visible={giftVisible} />
@@ -281,18 +291,14 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
       />
 
       <NoticeModal
-        actions={[
-          { label: 'Tamam', onPress: () => setFriendModalVisible(false), variant: 'secondary' },
-        ]}
+        actions={[{ label: 'Tamam', onPress: () => setFriendModalVisible(false), variant: 'secondary' }]}
         message="Arkadaşlık isteği gönderildi."
         title="İstek gönderildi"
         visible={friendModalVisible}
       />
 
       <NoticeModal
-        actions={[
-          { label: 'Tamam', onPress: () => setSafetyModalVisible(false), variant: 'secondary' },
-        ]}
+        actions={[{ label: 'Tamam', onPress: () => setSafetyModalVisible(false), variant: 'secondary' }]}
         message="Şikayet kaydı alındı. Moderasyon kuyruğuna eklendi."
         title="Şikayet / engelleme"
         visible={safetyModalVisible}
@@ -316,12 +322,10 @@ export function MatchingScreen({ navigation }: AppScreenProps<'Matching'>) {
 
 const styles = StyleSheet.create({
   content: {
-    flex: 1,
+    gap: spacing.md,
   },
   body: {
-    flex: 1,
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   selfCard: {
     flexDirection: 'row',
@@ -403,34 +407,6 @@ const styles = StyleSheet.create({
     color: colors.green,
     fontWeight: '700',
   },
-  actionRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  actionPill: {
-    minWidth: 52,
-    height: 52,
-    paddingHorizontal: 14,
-    borderRadius: 26,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  passPill: {
-    backgroundColor: 'rgba(255,124,156,0.12)',
-    borderColor: 'rgba(255,124,156,0.26)',
-  },
-  passText: {
-    color: colors.text,
-    fontWeight: '700',
-  },
   topicHint: {
     width: '100%',
     flexDirection: 'row',
@@ -446,53 +422,56 @@ const styles = StyleSheet.create({
   topicHintText: {
     color: colors.muted,
     flex: 1,
+    lineHeight: 18,
   },
-  controls: {
+  controlsGrid: {
     flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
   },
-  controlButton: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+  controlCard: {
+    width: '31%',
+    minHeight: 106,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSoft,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
   },
-  controlActive: {
+  controlCardActive: {
     backgroundColor: 'rgba(69, 224, 255, 0.14)',
     borderColor: 'rgba(69, 224, 255, 0.44)',
   },
-  disabledControl: {
+  controlCardDanger: {
+    backgroundColor: 'rgba(255,124,156,0.12)',
+    borderColor: 'rgba(255,124,156,0.3)',
+  },
+  controlCardDisabled: {
     opacity: 0.55,
   },
-  endButton: {
-    backgroundColor: 'rgba(255,124,156,0.18)',
-    borderColor: 'rgba(255,124,156,0.32)',
+  controlIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  endIcon: {
-    transform: [{ rotate: '135deg' }],
+  controlIconWrapActive: {
+    backgroundColor: 'rgba(69, 224, 255, 0.2)',
   },
-  helperText: {
-    color: colors.muted,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: spacing.md,
+  controlIconWrapDanger: {
+    backgroundColor: 'rgba(255,124,156,0.16)',
   },
-  reportPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  reportText: {
-    color: colors.muted,
+  controlLabel: {
+    color: colors.text,
     fontSize: 12,
     fontWeight: '700',
+    textAlign: 'center',
   },
 });

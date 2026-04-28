@@ -20,7 +20,7 @@ type GiftCelebrationOverlayProps = {
 
 export function GiftModal({ visible, onClose, onSelect }: GiftModalProps) {
   return (
-    <Modal animationType="fade" visible={visible} transparent>
+    <Modal animationType="fade" onRequestClose={onClose} statusBarTranslucent transparent visible={visible}>
       <View style={styles.backdrop}>
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
         <GlassCard style={styles.modalCard}>
@@ -76,7 +76,7 @@ export function GiftCelebrationOverlay({ gift, visible }: GiftCelebrationOverlay
   const accent = useMemo(() => gift?.accent ?? ['#FF4FB9', '#8F46FF'], [gift]);
 
   return (
-    <Modal animationType="fade" transparent visible={visible}>
+    <Modal animationType="fade" statusBarTranslucent transparent visible={visible}>
       <View style={styles.overlayBackdrop}>
         <LinearGradient colors={accent as [string, string]} style={styles.overlayOrb}>
           <Animated.View style={[styles.overlayInner, { transform: [{ scale: pulse }] }]}>

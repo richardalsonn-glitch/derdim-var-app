@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar } from '../components/Avatar';
@@ -49,7 +49,7 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
       <ScreenHeader onBack={() => navigation.goBack()} subtitle="Anonim profil ve güvenlik özeti" title="Profil" />
 
       <GlassCard style={styles.heroCard} toned="strong">
-        <Avatar avatar={avatar} size={96} />
+        <Avatar avatar={avatar} size={84} />
         <View style={styles.heroCopy}>
           <Text style={styles.alias}>{profile.username}</Text>
           <Text style={styles.packageLabel}>{profile.plan.toUpperCase()} plan aktif</Text>
@@ -79,15 +79,45 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
       </GlassCard>
 
       <GlassCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Kullanıcı adı</Text>
-        <FormInput icon="create-outline" label="Takma ad" onChangeText={setUsernameDraft} placeholder="takma ad" value={usernameDraft} />
+        <Text style={styles.sectionTitle}>Profil Bilgileri</Text>
+        <View style={styles.infoGrid}>
+          <View style={styles.infoCell}>
+            <Text style={styles.infoLabel}>Kullanıcı adı</Text>
+            <Text style={styles.infoValue}>{profile.username}</Text>
+          </View>
+          <View style={styles.infoCell}>
+            <Text style={styles.infoLabel}>Yaş</Text>
+            <Text style={styles.infoValue}>{profile.age}</Text>
+          </View>
+          <View style={styles.infoCell}>
+            <Text style={styles.infoLabel}>Cinsiyet</Text>
+            <Text style={styles.infoValue}>{profile.gender}</Text>
+          </View>
+          <View style={styles.infoCell}>
+            <Text style={styles.infoLabel}>Medeni durum</Text>
+            <Text style={styles.infoValue}>{profile.relationshipStatus}</Text>
+          </View>
+          <View style={styles.infoCell}>
+            <Text style={styles.infoLabel}>Paket</Text>
+            <Text style={styles.infoValue}>{profile.plan.toUpperCase()}</Text>
+          </View>
+          <View style={styles.infoCell}>
+            <Text style={styles.infoLabel}>Kayıt tarihi</Text>
+            <Text style={styles.infoValue}>{profile.joinDate}</Text>
+          </View>
+        </View>
+      </GlassCard>
+
+      <GlassCard style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Kullanıcı adını güncelle</Text>
+        <FormInput icon="create-outline" label="Kullanıcı adı" onChangeText={setUsernameDraft} placeholder="Yeni kullanıcı adı" value={usernameDraft} />
         <Text style={styles.note}>Kullanıcı adını 7 günde 1 kez değiştirebilirsin.</Text>
         {!canChangeUsername ? <Text style={styles.cooldown}>Tekrar değiştirmek için {remainingDays} gün beklemelisin.</Text> : null}
         <GradientButton disabled={!canChangeUsername} onPress={handleUsernameUpdate} title="Kullanıcı adını güncelle" variant="secondary" />
       </GlassCard>
 
       <GlassCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Aldığı hediyeler</Text>
+        <Text style={styles.sectionTitle}>Aldığı Hediyeler</Text>
         <View style={styles.grid}>
           {receivedGifts.map((gift) => (
             <View key={gift.id} style={styles.gridCard}>
@@ -131,24 +161,27 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
         </View>
       </GlassCard>
 
-      <GradientButton onPress={() => navigation.navigate('Packages')} title="Paketimi Yönet" />
-      <GradientButton onPress={() => setReportVisible(true)} title="Kullanıcıyı Şikayet Et" variant="ghost" />
+      <View style={styles.actionRow}>
+        <Pressable onPress={() => navigation.navigate('Packages')} style={styles.inlineAction}>
+          <Ionicons color={colors.text} name="diamond" size={16} />
+          <Text style={styles.inlineActionText}>Paketimi Yönet</Text>
+        </Pressable>
+        <Pressable onPress={() => setReportVisible(true)} style={styles.inlineAction}>
+          <Ionicons color={colors.text} name="shield-checkmark" size={16} />
+          <Text style={styles.inlineActionText}>Şikayet Et</Text>
+        </Pressable>
+      </View>
 
       <NoticeModal
-        actions={[
-          { label: 'Tamam', onPress: () => setUsernameNoticeVisible(false), variant: 'secondary' },
-        ]}
+        actions={[{ label: 'Tamam', onPress: () => setUsernameNoticeVisible(false), variant: 'secondary' }]}
         message="Kullanıcı adını tekrar değiştirmek için 7 gün beklemelisin."
         title="Kullanıcı adı limiti"
         visible={usernameNoticeVisible}
       />
 
       <NoticeModal
-        actions={[
-          { label: 'Şikayet et', onPress: () => navigation.navigate('Home'), variant: 'gold' },
-          { label: 'Vazgeç', onPress: () => setReportVisible(false), variant: 'ghost' },
-        ]}
-        message="Moderasyon paneli ileride bağlanacak. Şimdilik bu akış mock olarak çalışır."
+        actions={[{ label: 'Tamam', onPress: () => setReportVisible(false), variant: 'secondary' }]}
+        message="Şikayet kaydın güvenlik kuyruğuna alındı. Moderasyon paneli ayrı aşamada bağlanacak."
         title="Kullanıcıyı şikayet et"
         visible={reportVisible}
       />
@@ -159,7 +192,7 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
 const styles = StyleSheet.create({
   heroCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.md,
     paddingVertical: spacing.md,
   },
@@ -169,7 +202,7 @@ const styles = StyleSheet.create({
   },
   alias: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
   },
   packageLabel: {
@@ -227,8 +260,35 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
+  },
+  infoCell: {
+    width: '48%',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    gap: 4,
+  },
+  infoLabel: {
+    color: colors.dim,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  infoValue: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
   },
   note: {
     color: colors.dim,
@@ -308,5 +368,27 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
     fontSize: 12,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  inlineAction: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: spacing.sm,
+  },
+  inlineActionText: {
+    color: colors.text,
+    fontWeight: '700',
   },
 });
