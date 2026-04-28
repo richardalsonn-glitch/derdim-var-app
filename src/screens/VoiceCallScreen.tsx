@@ -248,7 +248,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
     const player = createAudioPlayer(COUNTDOWN_AUDIO_SOURCE);
-    player.volume = 0.9;
+    player.volume = 0.5;
     countdownAudioRef.current = player;
 
     return () => {
@@ -531,6 +531,15 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                       {partnerBadge.label}
                     </Text>
                   </LinearGradient>
+
+                  <View style={[styles.profileMetaRow, { gap: metrics.tinyGap }]}>
+                    <View style={[styles.rolePill, metrics.compact && styles.rolePillCompact]}>
+                      <Ionicons color={colors.pink} name="heart-circle" size={12} />
+                      <Text adjustsFontSizeToFit minimumFontScale={0.86} numberOfLines={1} style={styles.rolePillText}>
+                        Derman Oluyor
+                      </Text>
+                    </View>
+                  </View>
 
                   <View style={[styles.statsRow, { gap: metrics.tinyGap }]}>
                     <View style={styles.statItem}>
@@ -945,7 +954,7 @@ const styles = StyleSheet.create({
   profileInfo: {
     flex: 1,
     minWidth: 0,
-    gap: 6,
+    gap: 5,
   },
   nameRow: {
     flexDirection: 'row',
@@ -974,6 +983,32 @@ const styles = StyleSheet.create({
   memberBadgeText: {
     color: colors.text,
     fontSize: 11,
+    fontWeight: '700',
+  },
+  profileMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  rolePill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  rolePillCompact: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  rolePillText: {
+    color: '#D6B7FF',
+    fontSize: 10,
     fontWeight: '700',
   },
   statsRow: {

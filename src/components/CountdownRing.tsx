@@ -57,18 +57,18 @@ function mixColors(from: string, to: string, amount: number) {
 
 function getSegmentColor(progress: number, tone: CountdownRingProps['tone']) {
   if (tone === 'gold') {
-    return mixColors('#FFD86A', '#F4B45E', progress);
+    return mixColors('#FFE07A', '#FFB24D', progress);
   }
 
   if (tone === 'blue') {
-    return mixColors('#55D8FF', '#3F85FF', progress);
+    return mixColors('#7DE7FF', '#458BFF', progress);
   }
 
   if (progress < 0.5) {
-    return mixColors('#FF4FB9', '#AF5DFF', progress / 0.5);
+    return mixColors('#FF5FC8', '#A84CFF', progress / 0.5);
   }
 
-  return mixColors('#AF5DFF', '#57BCFF', (progress - 0.5) / 0.5);
+  return mixColors('#9C54FF', '#55C8FF', (progress - 0.5) / 0.5);
 }
 
 export function useCountdownTimer({ initialSeconds, onExpire, autoStart = true }: CountdownOptions) {
@@ -188,7 +188,11 @@ export function CountdownRing({
             top: y,
             transform: [{ rotate: `${angle + 90}deg` }],
             backgroundColor: isActive ? getSegmentColor(segmentProgress, tone) : 'rgba(255,255,255,0.06)',
-            opacity: isActive ? 1 : 0.65,
+            opacity: isActive ? 1 : 0.28,
+            shadowColor: isActive ? getSegmentColor(segmentProgress, tone) : 'transparent',
+            shadowOpacity: isActive ? 0.72 : 0,
+            shadowRadius: isActive ? 7 : 0,
+            shadowOffset: { width: 0, height: 0 },
           },
         };
       }),
@@ -300,12 +304,13 @@ const styles = StyleSheet.create({
   outerGlow: {
     position: 'absolute',
     borderWidth: 1,
-    borderColor: 'rgba(153, 70, 255, 0.26)',
+    borderColor: 'rgba(185, 104, 255, 0.3)',
     shadowColor: colors.purple,
-    shadowOpacity: 0.5,
-    shadowRadius: 30,
+    shadowOpacity: 0.62,
+    shadowRadius: 34,
     shadowOffset: { width: 0, height: 0 },
     elevation: 10,
+    backgroundColor: 'rgba(72, 24, 110, 0.05)',
   },
   dotRing: {
     position: 'absolute',
@@ -317,11 +322,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(25, 18, 54, 0.94)',
+    backgroundColor: 'rgba(30, 17, 66, 0.96)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    shadowColor: colors.purple,
-    shadowOpacity: 0.45,
+    borderColor: 'rgba(210, 148, 255, 0.24)',
+    shadowColor: '#AF5DFF',
+    shadowOpacity: 0.52,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 0 },
   },
@@ -329,18 +334,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(144, 112, 255, 0.32)',
-    backgroundColor: 'rgba(13, 11, 34, 0.68)',
+    borderColor: 'rgba(182, 112, 255, 0.42)',
+    backgroundColor: 'rgba(8, 9, 27, 0.82)',
   },
   coreSurface: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(7, 8, 22, 0.96)',
+    backgroundColor: 'rgba(6, 8, 22, 0.98)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(176, 99, 255, 0.18)',
   },
   title: {
-    color: colors.pink,
+    color: '#FF63C8',
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -357,17 +362,18 @@ const styles = StyleSheet.create({
   },
   promoPill: {
     minHeight: 30,
-    marginTop: 2,
-    paddingVertical: 6,
+    marginTop: 0,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(186, 104, 255, 0.18)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     maxWidth: '78%',
+    transform: [{ translateY: -4 }],
   },
   promoText: {
     color: colors.text,
