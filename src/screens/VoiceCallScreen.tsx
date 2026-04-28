@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ type MatchPartner = {
 type TopicChipProps = {
   label: TopicTag;
   selected: boolean;
+  compact: boolean;
   onPress: () => void;
 };
 
@@ -36,19 +37,37 @@ type ControlButtonProps = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   active: boolean;
+  size: number;
   onPress: () => void;
+};
+
+type Metrics = {
+  horizontalPadding: number;
+  verticalPadding: number;
+  gap: number;
+  tinyGap: number;
+  headerButton: number;
+  reportHeight: number;
+  reportWidth: number;
+  avatar: number;
+  profileMaxHeight: number;
+  sideButtonHeight: number;
+  sideColumnWidth: number;
+  autoHeight: number;
+  ring: number;
+  gift: number;
+  topicHeight: number;
+  likeHeight: number;
+  bottomHeight: number;
+  controlSize: number;
+  endSize: number;
+  skipWidth: number;
+  compact: boolean;
+  short: boolean;
 };
 
 const SEARCH_SECONDS = 2;
 const CALL_SECONDS = 60;
-
-const topicIcons: Record<TopicTag, keyof typeof Ionicons.glyphMap> = {
-  İlişki: 'heart',
-  İş: 'briefcase',
-  Para: 'cash',
-  Sağlık: 'medkit',
-  Genel: 'ellipsis-horizontal',
-};
 
 const partners: MatchPartner[] = [
   { id: 'luna', username: 'Luna_24', avatarId: 'f-2', gender: 'Kadın', plan: 'vip', dermanScore: 4.8, level: 3 },
@@ -57,48 +76,78 @@ const partners: MatchPartner[] = [
   { id: 'eren', username: 'Eren_31', avatarId: 'm-2', gender: 'Erkek', plan: 'vip', dermanScore: 4.9, level: 4 },
 ];
 
-function getInnerWidth(screenWidth: number) {
-  return Math.min(layout.maxWidth, screenWidth) - spacing.lg * 2;
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
-function getRingSize(innerWidth: number) {
-  return Math.max(248, Math.min(innerWidth - 10, 360));
+function getMetrics(width: number, height: number): Metrics {
+  const compact = width < 360 || height < 760;
+  const short = height < 700;
+  const horizontalPadding = width < 350 ? 12 : 16;
+  const gap = short ? 6 : compact ? 8 : 10;
+  const tinyGap = short ? 4 : 6;
+  const usableWidth = Math.min(layout.maxWidth, width) - horizontalPadding * 2;
+  const ring = clamp(Math.min(usableWidth - 56, height * 0.29), 204, compact ? 252 : 282);
+
+  return {
+    horizontalPadding,
+    verticalPadding: short ? 8 : 10,
+    gap,
+    tinyGap,
+    headerButton: compact ? 40 : 44,
+    reportHeight: compact ? 36 : 38,
+    reportWidth: compact ? 126 : 138,
+    avatar: short ? 72 : compact ? 76 : 82,
+    profileMaxHeight: short ? 128 : 142,
+    sideButtonHeight: short ? 42 : 46,
+    sideColumnWidth: compact ? 100 : 110,
+    autoHeight: short ? 58 : 64,
+    ring,
+    gift: short ? 72 : compact ? 76 : 82,
+    topicHeight: short ? 72 : 80,
+    likeHeight: short ? 58 : 66,
+    bottomHeight: short ? 96 : 106,
+    controlSize: short ? 56 : 60,
+    endSize: short ? 66 : 70,
+    skipWidth: short ? 96 : 106,
+    compact,
+    short,
+  };
 }
 
 function getBadge(plan: MembershipPlan) {
   if (plan === 'vip') {
     return {
-      label: 'VIP Üye',
+      label: 'VIP',
       icon: 'trophy' as const,
       colors: ['#8B5C00', '#E7BC4E'] as const,
     };
   }
 
   return {
-    label: 'Plus Üye',
+    label: 'Plus',
     icon: 'flash' as const,
     colors: ['#277BFF', '#725DFF'] as const,
   };
 }
 
-function TopicChip({ label, selected, onPress }: TopicChipProps) {
+function TopicChip({ label, selected, compact, onPress }: TopicChipProps) {
   return (
-    <Pressable onPress={onPress} style={[styles.topicChip, selected && styles.topicChipSelected]}>
-      <Ionicons color={selected ? colors.text : colors.pink} name={topicIcons[label]} size={16} />
-      <Text numberOfLines={1} style={[styles.topicChipText, selected && styles.topicChipTextSelected]}>
+    <Pressable onPress={onPress} style={[styles.topicChip, compact && styles.topicChipCompact, selected && styles.topicChipSelected]}>
+      <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.topicChipText, compact && styles.topicChipTextCompact, selected && styles.topicChipTextSelected]}>
         {label}
       </Text>
     </Pressable>
   );
 }
 
-function ControlButton({ icon, label, active, onPress }: ControlButtonProps) {
+function ControlButton({ icon, label, active, size, onPress }: ControlButtonProps) {
   return (
     <Pressable onPress={onPress} style={styles.controlButton}>
-      <View style={[styles.controlCircle, active && styles.controlCircleActive]}>
-        <Ionicons color={colors.text} name={icon} size={30} />
+      <View style={[styles.controlCircle, { width: size, height: size, borderRadius: size / 2 }, active && styles.controlCircleActive]}>
+        <Ionicons color={colors.text} name={icon} size={size * 0.48} />
       </View>
-      <Text numberOfLines={1} style={styles.controlLabel}>
+      <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.controlLabel}>
         {label}
       </Text>
       <View style={[styles.controlDot, active && styles.controlDotActive]} />
@@ -117,14 +166,8 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     skipCount,
     useDailyAppreciation,
   } = useAppState();
-  const { width } = useWindowDimensions();
-  const innerWidth = getInnerWidth(width);
-  const compactMode = innerWidth < 352;
-  const narrowBottomBar = innerWidth < 372;
-  const actionColumnWidth = compactMode ? 112 : 134;
-  const avatarSize = compactMode ? 88 : 112;
-  const ringSize = getRingSize(innerWidth);
-  const giftSize = compactMode ? 88 : 100;
+  const { width, height } = useWindowDimensions();
+  const metrics = useMemo(() => getMetrics(width, height), [width, height]);
   const [phase, setPhase] = useState<CallPhase>('searching');
   const [matchSeed, setMatchSeed] = useState(0);
   const [searchRemaining, setSearchRemaining] = useState(SEARCH_SECONDS);
@@ -142,7 +185,6 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   const [peerMuted, setPeerMuted] = useState(false);
   const [partner, setPartner] = useState<MatchPartner>(partners[0]);
   const [partnerScore, setPartnerScore] = useState(partners[0].dermanScore);
-
   const isMatched = phase === 'matched';
   const partnerAvatar = useMemo(() => getAvatarById(partner.avatarId), [partner.avatarId]);
   const partnerBadge = getBadge(partner.plan);
@@ -248,121 +290,117 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   return (
     <LinearGradient colors={[...gradients.background]} style={styles.screen}>
       <View pointerEvents="none" style={[styles.orb, styles.orbTop]} />
-      <View pointerEvents="none" style={[styles.orb, styles.orbCenter]} />
+      <View pointerEvents="none" style={[styles.orb, styles.orbMiddle]} />
       <View pointerEvents="none" style={[styles.orb, styles.orbBottom]} />
 
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.container}>
+        <View
+          style={[
+            styles.shell,
+            {
+              paddingHorizontal: metrics.horizontalPadding,
+              paddingVertical: metrics.verticalPadding,
+              gap: metrics.gap,
+            },
+          ]}
+        >
+          <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                <Ionicons color={colors.text} name="chevron-back" size={28} />
+              <Pressable
+                onPress={() => navigation.goBack()}
+                style={[styles.backButton, { width: metrics.headerButton, height: metrics.headerButton, borderRadius: metrics.headerButton / 2 }]}
+              >
+                <Ionicons color={colors.text} name="chevron-back" size={metrics.headerButton * 0.55} />
               </Pressable>
 
-              <View style={styles.headerCenter}>
-                <View style={styles.headerSignal}>
-                  <Ionicons color={colors.pink} name="pulse" size={24} />
-                </View>
-                <View style={styles.headerCopy}>
-                  <Text numberOfLines={1} style={styles.headerTitle}>
-                    Eşleştirme aşaması
-                  </Text>
-                  <Text numberOfLines={1} style={styles.headerSubtitle}>
-                    Seni anlayacak biri aranıyor...
-                  </Text>
-                </View>
+              <View style={styles.headerCopy}>
+                <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.headerTitle}>
+                  Eşleştirme
+                </Text>
+                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.headerSubtitle}>
+                  Seni anlayacak biri aranıyor...
+                </Text>
               </View>
 
-              <Pressable onPress={() => setSafetyModalVisible(true)} style={styles.reportButton}>
-                <Ionicons color={colors.danger} name="alert-circle" size={18} />
-                <Text numberOfLines={1} style={styles.reportButtonText}>
-                  Engelle / Şikayet Et
+              <Pressable onPress={() => setSafetyModalVisible(true)} style={[styles.reportButton, { height: metrics.reportHeight, width: metrics.reportWidth }]}>
+                <Ionicons color={colors.danger} name="alert-circle" size={15} />
+                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.reportButtonText}>
+                  Engelle / Şikayet
                 </Text>
               </Pressable>
             </View>
+          </View>
 
-            <View style={styles.profileCard}>
-              <View style={styles.profileLeft}>
-                <View style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}>
-                  <Avatar avatar={partnerAvatar} size={avatarSize} />
+          <View style={styles.profileSection}>
+            <View style={[styles.profileCard, { maxHeight: metrics.profileMaxHeight, padding: metrics.compact ? 10 : 12, gap: metrics.gap }]}>
+              <View style={styles.profileMain}>
+                <View style={[styles.avatarWrap, { width: metrics.avatar, height: metrics.avatar }]}>
+                  <Avatar avatar={partnerAvatar} size={metrics.avatar} />
                   <View style={styles.onlineDot} />
                   <LinearGradient colors={[...partnerBadge.colors]} style={styles.avatarBadge}>
-                    <Ionicons color={colors.text} name={partnerBadge.icon} size={15} />
+                    <Ionicons color={colors.text} name={partnerBadge.icon} size={13} />
                   </LinearGradient>
                 </View>
 
                 <View style={styles.profileInfo}>
                   <View style={styles.nameRow}>
-                    <Text numberOfLines={1} style={styles.partnerName}>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={1} style={[styles.partnerName, metrics.compact && styles.partnerNameCompact]}>
                       {partner.username}
                     </Text>
-                    <Ionicons
-                      color={partner.gender === 'Kadın' ? colors.pink : colors.cyan}
-                      name={partner.gender === 'Kadın' ? 'female' : 'male'}
-                      size={18}
-                    />
+                    <Ionicons color={partner.gender === 'Kadın' ? colors.pink : colors.cyan} name={partner.gender === 'Kadın' ? 'female' : 'male'} size={16} />
                   </View>
 
                   <LinearGradient colors={[...partnerBadge.colors]} style={styles.memberBadge}>
-                    <Ionicons color={colors.text} name={partnerBadge.icon} size={13} />
-                    <Text numberOfLines={1} style={styles.memberBadgeText}>
+                    <Ionicons color={colors.text} name={partnerBadge.icon} size={11} />
+                    <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.memberBadgeText}>
                       {partnerBadge.label}
                     </Text>
                   </LinearGradient>
 
-                  <View style={styles.statsRow}>
-                    <View style={styles.statBlock}>
-                      <Ionicons color={colors.goldSoft} name="star" size={16} />
-                      <Text numberOfLines={1} style={styles.statText}>
-                        {partnerScore.toFixed(1)}
+                  <View style={[styles.statsRow, { gap: metrics.tinyGap }]}>
+                    <View style={styles.statItem}>
+                      <Ionicons color={colors.goldSoft} name="star" size={14} />
+                      <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.statText}>
+                        {partnerScore.toFixed(1)} Derman
                       </Text>
                     </View>
                     <View style={styles.statDivider} />
-                    <View style={styles.statBlock}>
-                      <Ionicons color={colors.cyan} name="ribbon" size={16} />
-                      <Text numberOfLines={1} style={styles.statText}>
+                    <View style={styles.statItem}>
+                      <Ionicons color={colors.cyan} name="ribbon" size={14} />
+                      <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.statText}>
                         Level {partner.level}
                       </Text>
                     </View>
                   </View>
-
-                  <View style={styles.rolePill}>
-                    <Ionicons color={colors.pink} name="heart-circle" size={16} />
-                    <Text numberOfLines={1} style={styles.rolePillText}>
-                      Derman oluyor
-                    </Text>
-                  </View>
                 </View>
               </View>
 
-              <View style={[styles.profileActions, { width: actionColumnWidth }]}>
-                <Pressable onPress={() => setFriendModalVisible(true)} style={styles.sideActionButton}>
-                  <Ionicons color={colors.text} name="person-add" size={18} />
-                  <Text numberOfLines={2} style={styles.sideActionText}>
+              <View style={[styles.sideActions, { width: metrics.sideColumnWidth, gap: metrics.tinyGap }]}>
+                <Pressable onPress={() => setFriendModalVisible(true)} style={[styles.sideActionButton, { height: metrics.sideButtonHeight }]}>
+                  <Ionicons color={colors.text} name="person-add" size={16} />
+                  <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.sideActionText}>
                     Arkadaş Ekle
                   </Text>
                 </Pressable>
 
-                <Pressable onPress={() => setPeerMuted((current) => !current)} style={[styles.sideActionButton, styles.sideActionDanger]}>
-                  <Ionicons color={colors.danger} name={peerMuted ? 'volume-high' : 'volume-mute'} size={18} />
-                  <Text numberOfLines={2} style={styles.sideActionText}>
+                <Pressable onPress={() => setPeerMuted((current) => !current)} style={[styles.sideActionButton, styles.sideActionDanger, { height: metrics.sideButtonHeight }]}>
+                  <Ionicons color={colors.danger} name={peerMuted ? 'volume-high' : 'volume-mute'} size={16} />
+                  <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.sideActionText}>
                     {peerMuted ? 'Sesini Aç' : 'Sessize Al'}
                   </Text>
                 </Pressable>
               </View>
             </View>
+          </View>
 
-            <View style={styles.autoCard}>
-              <View style={styles.autoIconWrap}>
-                <Ionicons color={colors.text} name="sync" size={28} />
-              </View>
-
+          <View style={styles.autoSection}>
+            <View style={[styles.autoCard, { height: metrics.autoHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
               <View style={styles.autoCopy}>
-                <Text numberOfLines={1} style={styles.autoTitle}>
+                <Text adjustsFontSizeToFit minimumFontScale={0.88} numberOfLines={1} style={styles.autoTitle}>
                   Otomatik eşleşmeye devam et
                 </Text>
-                <Text numberOfLines={2} style={styles.autoSubtitle}>
-                  Görüşme bitince sıradaki kişiyle devam et.
+                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.autoSubtitle}>
+                  Görüşme bitince sıradaki kişiye geç.
                 </Text>
               </View>
 
@@ -370,13 +408,16 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                 <View style={[styles.toggleKnob, autoContinue && styles.toggleKnobActive]} />
               </Pressable>
             </View>
+          </View>
 
-            <View style={[styles.ringSection, { minHeight: ringSize + giftSize * 0.62 }]}>
+          <View style={styles.ringSection}>
+            <View style={[styles.ringWrap, { minHeight: metrics.ring + 10 }]}>
               <CountdownRing
-                promoText={isMatched ? `Hediye göndererek +${partner.plan === 'vip' ? '10' : '5'} dk kazan!` : undefined}
+                promoText={isMatched ? `Hediye ile +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
                 promoIcon="gift"
                 remainingSeconds={isMatched ? remainingSeconds : searchRemaining}
-                size={ringSize}
+                segmentCount={76}
+                size={metrics.ring}
                 subtitle={isMatched ? 'Kalan Süre' : 'Bağlanıyor...'}
                 title={isMatched ? 'Görüşme Başladı' : 'Seni anlayacak biri aranıyor...'}
                 titleIcon={isMatched ? 'people' : 'pulse'}
@@ -390,105 +431,100 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                 style={[
                   styles.giftButton,
                   {
-                    width: giftSize,
-                    height: giftSize,
-                    borderRadius: giftSize / 2,
+                    width: metrics.gift,
+                    height: metrics.gift,
+                    borderRadius: metrics.gift / 2,
+                    bottom: 2,
+                    right: clamp((Math.min(layout.maxWidth, width) - metrics.horizontalPadding * 2 - metrics.ring) / 2 - 6, -2, 18),
                   },
                   !isMatched && styles.giftButtonDisabled,
                 ]}
               >
-                <LinearGradient colors={['rgba(255, 85, 177, 0.98)', 'rgba(125, 72, 255, 0.96)']} style={styles.giftGradient}>
-                  <Ionicons color={colors.text} name="gift" size={compactMode ? 24 : 28} />
-                  <Text numberOfLines={2} style={styles.giftButtonText}>
-                    Hediye Gönder
+                <LinearGradient colors={['rgba(255, 84, 176, 0.98)', 'rgba(126, 74, 255, 0.96)']} style={styles.giftGradient}>
+                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 22 : 24} />
+                  <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={2} style={styles.giftButtonText}>
+                    Hediye{'\n'}Gönder
                   </Text>
                 </LinearGradient>
               </Pressable>
             </View>
+          </View>
 
-            <View style={styles.listenRow}>
-              <Ionicons color={colors.pink} name="pulse" size={22} />
-              <Text numberOfLines={1} style={styles.listenText}>
-                {isMatched ? 'Seni dinliyor...' : 'Seni anlayacak biri aranıyor...'}
+          <View style={styles.bottomSection}>
+            <View style={[styles.topicCard, { height: metrics.topicHeight, paddingHorizontal: metrics.compact ? 10 : 12, paddingVertical: metrics.short ? 8 : 10 }]}>
+              <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.topicTitle}>
+                Konu seç
               </Text>
-            </View>
-
-            <View style={styles.topicCard}>
-              <Text numberOfLines={2} style={styles.topicTitle}>
-                Konuşmak istediğiniz konuyu seçebilirsiniz
-              </Text>
-
-              <View style={styles.topicGrid}>
+              <View style={[styles.topicRow, { gap: metrics.tinyGap }]}>
                 {topics.map((topic) => (
-                  <TopicChip key={topic} label={topic} onPress={() => setActiveTopic(topic)} selected={activeTopic === topic} />
+                  <TopicChip
+                    key={topic}
+                    compact={metrics.compact}
+                    label={topic}
+                    onPress={() => setActiveTopic(topic)}
+                    selected={activeTopic === topic}
+                  />
                 ))}
               </View>
             </View>
 
-            <View style={styles.likeCard}>
-              <View style={styles.likeCopy}>
-                <Ionicons color={colors.goldSoft} name="sparkles" size={22} />
-                <View style={styles.likeTextWrap}>
-                  <Text numberOfLines={2} style={styles.likeTitle}>
-                    İyi bir sohbet, iyi bir ruh haline iyi gelir.
-                  </Text>
-                  <Text numberOfLines={1} style={styles.likeSubtitle}>
-                    Birbirine değer kat.
-                  </Text>
-                </View>
-              </View>
+            <View style={[styles.likeCard, { height: metrics.likeHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
+              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.likeText}>
+                İyi geldiyse beğen
+              </Text>
 
               <Pressable disabled={!isMatched} onPress={handleLike} style={[styles.likeButton, !isMatched && styles.likeButtonDisabled]}>
                 <LinearGradient colors={['rgba(255, 84, 176, 0.98)', 'rgba(156, 71, 255, 0.98)']} style={styles.likeGradient}>
-                  <Ionicons color={colors.text} name="heart" size={22} />
-                  <Text numberOfLines={1} style={styles.likeButtonText}>
+                  <Ionicons color={colors.text} name="heart" size={18} />
+                  <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.likeButtonText}>
                     Beğen
                   </Text>
                 </LinearGradient>
               </Pressable>
             </View>
 
-            <View style={[styles.bottomBar, narrowBottomBar && styles.bottomBarCompact]}>
-              <View style={[styles.mainControls, narrowBottomBar && styles.mainControlsCompact]}>
+            <View style={[styles.bottomBar, { height: metrics.bottomHeight, paddingHorizontal: metrics.compact ? 10 : 12, paddingVertical: metrics.short ? 8 : 10 }]}>
+              <View style={styles.bottomLeft}>
                 <ControlButton
                   active={micEnabled}
                   icon={micEnabled ? 'mic' : 'mic-off'}
                   label="Mikrofon"
                   onPress={() => setMicEnabled((current) => !current)}
+                  size={metrics.controlSize}
                 />
                 <ControlButton
                   active={speakerEnabled}
                   icon={speakerEnabled ? 'volume-high' : 'volume-mute'}
                   label="Hoparlör"
                   onPress={() => setSpeakerEnabled((current) => !current)}
+                  size={metrics.controlSize}
                 />
-
                 <Pressable onPress={finishConversation} style={styles.endCallButton}>
-                  <LinearGradient colors={['#FF6E8B', '#D61E50']} style={styles.endCallGradient}>
-                    <Ionicons color={colors.text} name="call" size={30} style={styles.endCallIcon} />
+                  <LinearGradient colors={['#FF6E8B', '#D61E50']} style={[styles.endCallGradient, { width: metrics.endSize, height: metrics.endSize, borderRadius: metrics.endSize / 2 }]}>
+                    <Ionicons color={colors.text} name="call" size={metrics.endSize * 0.42} style={styles.endCallIcon} />
                   </LinearGradient>
-                  <Text numberOfLines={2} style={styles.endCallText}>
-                    Görüşmeyi Bitir
+                  <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.endCallText}>
+                    Bitir
                   </Text>
                 </Pressable>
               </View>
 
-              <Pressable onPress={handlePass} style={[styles.skipButton, narrowBottomBar && styles.skipButtonCompact]}>
+              <Pressable onPress={handlePass} style={[styles.skipButton, { width: metrics.skipWidth }]}>
                 <LinearGradient colors={['rgba(139, 53, 255, 0.98)', 'rgba(255, 81, 173, 0.98)']} style={styles.skipGradient}>
-                  <Ionicons color={colors.text} name="play-skip-forward" size={30} />
-                  <View style={styles.skipCopy}>
-                    <Text numberOfLines={1} style={styles.skipTitle}>
+                  <Ionicons color={colors.text} name="play-skip-forward" size={20} />
+                  <View style={styles.skipTextWrap}>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.skipTitle}>
                       Pas Geç
                     </Text>
-                    <Text numberOfLines={2} style={styles.skipSubtitle}>
-                      Sonraki kişiye geç
+                    <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.skipSubtitle}>
+                      Sonraki
                     </Text>
                   </View>
                 </LinearGradient>
               </Pressable>
             </View>
           </View>
-        </ScrollView>
+        </View>
       </SafeAreaView>
 
       <GiftModal onClose={() => setGiftVisible(false)} onSelect={handleGiftSelect} visible={giftVisible} />
@@ -563,131 +599,110 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 32,
-  },
-  container: {
+  shell: {
+    flex: 1,
     width: '100%',
     maxWidth: layout.maxWidth,
     alignSelf: 'center',
-    gap: spacing.md,
   },
   orb: {
     position: 'absolute',
     borderRadius: 999,
   },
   orbTop: {
-    top: -110,
-    right: -30,
-    width: 260,
-    height: 260,
-    backgroundColor: 'rgba(255, 76, 176, 0.14)',
+    top: -120,
+    right: -40,
+    width: 240,
+    height: 240,
+    backgroundColor: 'rgba(255, 83, 178, 0.12)',
   },
-  orbCenter: {
-    top: 320,
-    left: -70,
-    width: 220,
-    height: 220,
-    backgroundColor: 'rgba(114, 77, 255, 0.14)',
+  orbMiddle: {
+    top: '36%',
+    left: -80,
+    width: 200,
+    height: 200,
+    backgroundColor: 'rgba(120, 80, 255, 0.12)',
   },
   orbBottom: {
-    bottom: 90,
-    right: -70,
-    width: 220,
-    height: 220,
-    backgroundColor: 'rgba(78, 182, 255, 0.12)',
+    bottom: 20,
+    right: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: 'rgba(72, 179, 255, 0.1)',
+  },
+  headerSection: {
+    flex: 1,
+    justifyContent: 'center',
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: 8,
   },
   backButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(177, 133, 255, 0.28)',
-    backgroundColor: 'rgba(18, 18, 44, 0.82)',
-  },
-  headerCenter: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  headerSignal: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(102, 51, 255, 0.16)',
+    backgroundColor: 'rgba(18, 18, 44, 0.84)',
   },
   headerCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   headerTitle: {
     color: colors.pink,
     fontSize: 15,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    flexShrink: 1,
+    letterSpacing: 0.3,
   },
   headerSubtitle: {
     color: colors.text,
-    fontSize: 13,
-    opacity: 0.92,
-    flexShrink: 1,
+    fontSize: 12,
+    opacity: 0.9,
   },
   reportButton: {
-    maxWidth: 172,
-    minHeight: 48,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 89, 143, 0.56)',
-    backgroundColor: 'rgba(58, 15, 43, 0.82)',
-    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 89, 143, 0.52)',
+    backgroundColor: 'rgba(58, 15, 43, 0.82)',
+    paddingHorizontal: 10,
   },
   reportButtonText: {
     color: colors.danger,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     flexShrink: 1,
   },
+  profileSection: {
+    flex: 1.8,
+    justifyContent: 'center',
+  },
   profileCard: {
+    flex: 1,
     flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: spacing.sm,
-    padding: spacing.md,
+    alignItems: 'center',
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: 'rgba(181, 120, 255, 0.26)',
+    borderColor: 'rgba(181, 120, 255, 0.24)',
     backgroundColor: 'rgba(17, 14, 42, 0.84)',
     shadowColor: colors.shadow,
-    shadowOpacity: 0.34,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
-  profileLeft: {
+  profileMain: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: 10,
   },
   avatarWrap: {
     justifyContent: 'center',
@@ -695,23 +710,23 @@ const styles = StyleSheet.create({
   },
   avatarBadge: {
     position: 'absolute',
-    top: -6,
+    top: -4,
     right: -2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.14)',
   },
   onlineDot: {
     position: 'absolute',
-    right: 4,
-    bottom: 6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    right: 3,
+    bottom: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 2,
     borderColor: colors.background,
     backgroundColor: '#44F47C',
@@ -719,147 +734,116 @@ const styles = StyleSheet.create({
   profileInfo: {
     flex: 1,
     minWidth: 0,
-    gap: 8,
+    gap: 6,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   partnerName: {
     flex: 1,
     minWidth: 0,
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
-    flexShrink: 1,
+  },
+  partnerNameCompact: {
+    fontSize: 18,
   },
   memberBadge: {
     alignSelf: 'flex-start',
     borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   memberBadgeText: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
   },
-  statBlock: {
+  statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   statDivider: {
     width: 1,
-    height: 16,
+    height: 12,
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
   statText: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     flexShrink: 1,
   },
-  rolePill: {
-    alignSelf: 'flex-start',
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  rolePillText: {
-    color: '#D5B5FF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  profileActions: {
-    gap: spacing.sm,
+  sideActions: {
+    justifyContent: 'center',
   },
   sideActionButton: {
-    flex: 1,
-    minHeight: 58,
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.04)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   sideActionDanger: {
     borderColor: 'rgba(255, 89, 143, 0.26)',
     backgroundColor: 'rgba(64, 16, 37, 0.76)',
   },
   sideActionText: {
-    flex: 1,
     color: colors.text,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
-    textAlign: 'left',
     flexShrink: 1,
   },
+  autoSection: {
+    flex: 0.9,
+    justifyContent: 'center',
+  },
   autoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: 'rgba(181, 120, 255, 0.22)',
     backgroundColor: 'rgba(18, 16, 42, 0.82)',
-  },
-  autoIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    gap: 10,
   },
   autoCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 1,
   },
   autoTitle: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
-    flexShrink: 1,
   },
   autoSubtitle: {
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    flexShrink: 1,
+    fontSize: 11,
   },
   toggle: {
-    width: 72,
-    height: 42,
-    borderRadius: 21,
+    width: 52,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.08)',
-    padding: 3,
+    padding: 2,
     justifyContent: 'center',
   },
   toggleActive: {
@@ -867,31 +851,33 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(202, 128, 255, 0.44)',
   },
   toggleKnob: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: colors.text,
   },
   toggleKnobActive: {
     alignSelf: 'flex-end',
   },
   ringSection: {
+    flex: 3.4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringWrap: {
     width: '100%',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     position: 'relative',
-    paddingTop: spacing.sm,
   },
   giftButton: {
     position: 'absolute',
-    right: 0,
-    bottom: 2,
     overflow: 'hidden',
     shadowColor: colors.pink,
-    shadowOpacity: 0.44,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   giftButtonDisabled: {
     opacity: 0.55,
@@ -900,62 +886,52 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
+    gap: 3,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 6,
   },
   giftButtonText: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 15,
+    lineHeight: 12,
   },
-  listenRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  listenText: {
-    color: '#CFC3FF',
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1,
+  bottomSection: {
+    flex: 2.9,
+    justifyContent: 'space-between',
   },
   topicCard: {
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: 'rgba(181, 120, 255, 0.22)',
     backgroundColor: 'rgba(18, 16, 42, 0.82)',
-    padding: spacing.md,
-    gap: spacing.sm,
+    justifyContent: 'center',
+    gap: 8,
   },
   topicTitle: {
     color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '700',
   },
-  topicGrid: {
+  topicRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
   },
   topicChip: {
-    minHeight: 42,
-    minWidth: 88,
-    maxWidth: '48%',
-    borderRadius: 21,
+    flex: 1,
+    minWidth: 0,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.04)',
-    paddingHorizontal: 12,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    paddingHorizontal: 6,
+  },
+  topicChipCompact: {
+    height: 30,
   },
   topicChipSelected: {
     borderColor: 'rgba(209, 126, 255, 0.52)',
@@ -963,106 +939,78 @@ const styles = StyleSheet.create({
   },
   topicChipText: {
     color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  topicChipTextCompact: {
+    fontSize: 10,
   },
   topicChipTextSelected: {
     color: colors.text,
   },
   likeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: 'rgba(181, 120, 255, 0.22)',
     backgroundColor: 'rgba(18, 16, 42, 0.82)',
-  },
-  likeCopy: {
-    flex: 1,
-    minWidth: 0,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
   },
-  likeTextWrap: {
+  likeText: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
-  },
-  likeTitle: {
-    color: '#D9B0FF',
-    fontSize: 16,
+    color: '#D8B3FF',
+    fontSize: 13,
     fontWeight: '700',
-    lineHeight: 21,
-    flexShrink: 1,
-  },
-  likeSubtitle: {
-    color: colors.muted,
-    fontSize: 14,
-    flexShrink: 1,
   },
   likeButton: {
-    minWidth: 138,
-    borderRadius: radius.xl,
+    width: 102,
+    borderRadius: radius.lg,
     overflow: 'hidden',
   },
   likeButtonDisabled: {
     opacity: 0.55,
   },
   likeGradient: {
-    minHeight: 62,
-    paddingHorizontal: 18,
+    height: 40,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
   },
   likeButtonText: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '800',
   },
   bottomBar: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: spacing.sm,
-    padding: spacing.md,
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: 'rgba(181, 120, 255, 0.22)',
-    backgroundColor: 'rgba(18, 16, 42, 0.84)',
-    marginBottom: 10,
+    backgroundColor: 'rgba(18, 16, 42, 0.86)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  bottomBarCompact: {
-    flexDirection: 'column',
-  },
-  mainControls: {
+  bottomLeft: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-end',
-    gap: spacing.sm,
-  },
-  mainControlsCompact: {
-    justifyContent: 'space-around',
-  },
-  controlButton: {
-    flex: 1,
-    minWidth: 72,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     gap: 8,
   },
+  controlButton: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
   controlCircle: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
     borderWidth: 1,
     borderColor: 'rgba(122, 79, 255, 0.34)',
     backgroundColor: 'rgba(52, 26, 103, 0.68)',
@@ -1071,42 +1019,37 @@ const styles = StyleSheet.create({
   },
   controlCircleActive: {
     shadowColor: colors.purple,
-    shadowOpacity: 0.36,
-    shadowRadius: 14,
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
   controlLabel: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   controlDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
   controlDotActive: {
     backgroundColor: '#3EF887',
   },
   endCallButton: {
-    flex: 1,
-    minWidth: 92,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 8,
+    gap: 4,
   },
   endCallGradient: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#FF557E',
-    shadowOpacity: 0.46,
-    shadowRadius: 18,
+    shadowOpacity: 0.42,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
   },
   endCallIcon: {
@@ -1114,43 +1057,37 @@ const styles = StyleSheet.create({
   },
   endCallText: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
-    textAlign: 'center',
   },
   skipButton: {
-    width: 172,
+    height: '100%',
     borderRadius: radius.xl,
     overflow: 'hidden',
-  },
-  skipButtonCompact: {
-    width: '100%',
+    flexShrink: 0,
   },
   skipGradient: {
     flex: 1,
-    minHeight: 148,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
+    paddingHorizontal: 8,
   },
-  skipCopy: {
-    alignItems: 'center',
-    gap: 4,
+  skipTextWrap: {
+    minWidth: 0,
+    alignItems: 'flex-start',
   },
   skipTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 13,
     fontWeight: '800',
   },
   skipSubtitle: {
     color: colors.text,
-    fontSize: 14,
-    textAlign: 'center',
-    opacity: 0.9,
-    lineHeight: 18,
+    fontSize: 10,
+    opacity: 0.88,
   },
 });

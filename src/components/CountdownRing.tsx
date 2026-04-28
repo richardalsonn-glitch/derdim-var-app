@@ -143,8 +143,8 @@ export function CountdownRing({
   const pulse = useRef(new Animated.Value(0.97)).current;
   const progress = totalSeconds === 0 ? 0 : clamp(remainingSeconds / totalSeconds, 0, 1);
   const center = size / 2;
-  const segmentWidth = Math.max(6, size * 0.018);
-  const segmentHeight = Math.max(16, size * 0.075);
+  const segmentWidth = clamp(size * 0.012, 3, 5);
+  const segmentHeight = clamp(size * 0.052, 10, 14);
   const segmentRadius = size / 2 - segmentHeight * 0.84;
   const activeSegments = Math.max(0, Math.round(progress * segmentCount));
   const markerAngle = -90 + progress * 360;
@@ -200,14 +200,14 @@ export function CountdownRing({
   const markerSize = Math.max(20, size * 0.075);
   const markerLeft = center + Math.cos(markerRadians) * markerRadius - markerSize / 2;
   const markerTop = center + Math.sin(markerRadians) * markerRadius - markerSize / 2;
-  const titleSize = clamp(size * 0.055, 16, 24);
-  const timeSize = clamp(size * 0.19, 48, 82);
-  const subtitleSize = clamp(size * 0.055, 16, 24);
-  const promoIconSize = clamp(size * 0.068, 18, 26);
-  const promoTextSize = clamp(size * 0.046, 14, 18);
+  const titleSize = clamp(size * 0.05, 14, 21);
+  const timeSize = clamp(size * 0.18, 44, 60);
+  const subtitleSize = clamp(size * 0.05, 13, 19);
+  const promoIconSize = clamp(size * 0.06, 16, 22);
+  const promoTextSize = clamp(size * 0.04, 12, 15);
   const promoPaddingHorizontal = clamp(size * 0.052, 16, 22);
-  const titleIconSize = clamp(size * 0.072, 20, 28);
-  const contentGap = clamp(size * 0.028, 10, 16);
+  const titleIconSize = clamp(size * 0.066, 18, 24);
+  const contentGap = clamp(size * 0.022, 8, 12);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }]}>
@@ -356,9 +356,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   promoPill: {
-    minHeight: 48,
-    marginTop: 8,
-    paddingVertical: 12,
+    minHeight: 40,
+    marginTop: 4,
+    paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
