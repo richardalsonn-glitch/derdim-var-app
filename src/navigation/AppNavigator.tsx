@@ -19,6 +19,7 @@ import { RematchScreen } from '../screens/RematchScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SilentScreamScreen } from '../screens/SilentScreamScreen';
 import { SplashScreen } from '../screens/SplashScreen';
+import { VoiceCallScreen } from '../screens/VoiceCallScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -52,6 +53,7 @@ export function AppNavigator() {
         <Stack.Screen component={ProfileInfoScreen} name="ProfileInfo" />
         <Stack.Screen component={AvatarSelectionScreen} name="AvatarSelection" />
         <Stack.Screen component={HomeScreen} name="Home" />
+        <Stack.Screen component={VoiceCallScreen} name="VoiceCall" />
         <Stack.Screen component={MatchingScreen} name="Matching" />
         <Stack.Screen component={ChatScreen} name="Chat" />
         <Stack.Screen component={PackagesScreen} name="Packages" />

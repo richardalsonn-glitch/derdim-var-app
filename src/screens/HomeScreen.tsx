@@ -107,7 +107,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
 
     if (autoCallCountdown <= 0) {
-      navigation.navigate('Matching');
+      navigation.navigate('VoiceCall');
       setAutoCallCountdown(AUTO_CALL_SECONDS);
       return;
     }
@@ -129,7 +129,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     setActiveRole(role);
     updateProfile({ mood: selectedMood });
     resetAutoCall();
-    navigation.navigate('Matching');
+    navigation.navigate('VoiceCall');
   };
 
   const startVoiceFlow = async (role: MatchRole) => {

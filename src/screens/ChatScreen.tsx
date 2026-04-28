@@ -8,7 +8,7 @@ import { AppScreenProps } from '../navigation/types';
 export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
   useEffect(() => {
     const frameId = requestAnimationFrame(() => {
-      navigation.replace('Matching');
+      navigation.replace('VoiceCall');
     });
 
     return () => cancelAnimationFrame(frameId);
@@ -18,8 +18,8 @@ export function ChatScreen({ navigation }: AppScreenProps<'Chat'>) {
     <PremiumScreen contentStyle={styles.content} scroll={false}>
       <View style={styles.body}>
         <ActivityIndicator color={colors.cyan} size="large" />
-        <Text style={styles.title}>Ses odasına yönlendiriliyorsun</Text>
-        <Text style={styles.subtitle}>Bu rota eski bağlantılar için tutuluyor. Görüşme deneyimi artık MatchingScreen içinde başlıyor.</Text>
+        <Text style={styles.title}>Görüşme ekranına yönlendiriliyorsun</Text>
+        <Text style={styles.subtitle}>Bu rota eski sohbet bağlantıları için tutuluyor. Yeni sesli görüşme deneyimi VoiceCallScreen içinde açılıyor.</Text>
       </View>
     </PremiumScreen>
   );

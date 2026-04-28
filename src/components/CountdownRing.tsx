@@ -14,6 +14,7 @@ type CountdownRingProps = {
   subtitle?: string;
   promoText?: string;
   promoIcon?: keyof typeof Ionicons.glyphMap;
+  titleIcon?: keyof typeof Ionicons.glyphMap;
   footerSlot?: ReactNode;
   segmentCount?: number;
 };
@@ -135,6 +136,7 @@ export function CountdownRing({
   subtitle,
   promoText,
   promoIcon = 'gift',
+  titleIcon,
   footerSlot,
   segmentCount = 88,
 }: CountdownRingProps) {
@@ -198,6 +200,14 @@ export function CountdownRing({
   const markerSize = Math.max(20, size * 0.075);
   const markerLeft = center + Math.cos(markerRadians) * markerRadius - markerSize / 2;
   const markerTop = center + Math.sin(markerRadians) * markerRadius - markerSize / 2;
+  const titleSize = clamp(size * 0.055, 16, 24);
+  const timeSize = clamp(size * 0.19, 48, 82);
+  const subtitleSize = clamp(size * 0.055, 16, 24);
+  const promoIconSize = clamp(size * 0.068, 18, 26);
+  const promoTextSize = clamp(size * 0.046, 14, 18);
+  const promoPaddingHorizontal = clamp(size * 0.052, 16, 22);
+  const titleIconSize = clamp(size * 0.072, 20, 28);
+  const contentGap = clamp(size * 0.028, 10, 16);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }]}>
@@ -243,17 +253,35 @@ export function CountdownRing({
       </View>
 
       <View style={[styles.innerRing, { width: size * 0.82, height: size * 0.82, borderRadius: (size * 0.82) / 2 }]}>
-        <View style={[styles.coreSurface, { width: size * 0.72, height: size * 0.72, borderRadius: (size * 0.72) / 2 }]}>
-          <Text style={styles.title}>{title ?? caption}</Text>
-          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.time}>
+        <View
+          style={[
+            styles.coreSurface,
+            {
+              width: size * 0.72,
+              height: size * 0.72,
+              borderRadius: (size * 0.72) / 2,
+              gap: contentGap,
+              paddingHorizontal: clamp(size * 0.06, 20, 28),
+            },
+          ]}
+        >
+          {titleIcon ? <Ionicons color={colors.pink} name={titleIcon} size={titleIconSize} /> : null}
+          <Text numberOfLines={2} style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.18 }]}>
+            {title ?? caption}
+          </Text>
+          <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[styles.time, { fontSize: timeSize }]}>
             {formatSeconds(remainingSeconds)}
           </Text>
-          <Text style={styles.subtitle}>{subtitle ?? caption}</Text>
+          <Text numberOfLines={2} style={[styles.subtitle, { fontSize: subtitleSize, lineHeight: subtitleSize * 1.18 }]}>
+            {subtitle ?? caption}
+          </Text>
 
           {promoText ? (
-            <View style={styles.promoPill}>
-              <Ionicons color={colors.pink} name={promoIcon} size={20} />
-              <Text style={styles.promoText}>{promoText}</Text>
+            <View style={[styles.promoPill, { paddingHorizontal: promoPaddingHorizontal }]}>
+              <Ionicons color={colors.pink} name={promoIcon} size={promoIconSize} />
+              <Text numberOfLines={2} style={[styles.promoText, { fontSize: promoTextSize, lineHeight: promoTextSize * 1.24 }]}>
+                {promoText}
+              </Text>
             </View>
           ) : null}
 
@@ -307,35 +335,29 @@ const styles = StyleSheet.create({
   coreSurface: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
     backgroundColor: 'rgba(7, 8, 22, 0.96)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
   title: {
     color: colors.pink,
-    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
   time: {
     color: colors.text,
-    fontSize: 54,
     fontWeight: '900',
     width: '100%',
     textAlign: 'center',
   },
   subtitle: {
     color: colors.text,
-    fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   promoPill: {
     minHeight: 48,
     marginTop: 8,
-    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1,
@@ -348,8 +370,8 @@ const styles = StyleSheet.create({
   },
   promoText: {
     color: colors.text,
-    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+    flexShrink: 1,
   },
 });

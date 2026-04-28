@@ -7,6 +7,7 @@ export type RootStackParamList = {
   ProfileInfo: undefined;
   AvatarSelection: undefined;
   Home: undefined;
+  VoiceCall: undefined;
   Matching: undefined;
   Chat: undefined;
   GiftPopup: undefined;
