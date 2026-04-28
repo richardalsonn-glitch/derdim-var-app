@@ -27,13 +27,13 @@ function getPlanColors(plan: ProfileCardData['plan']) {
 }
 
 export function ProfileCard({ data, avatar, palette, compact = false, onPress }: ProfileCardProps) {
-  const avatarSize = compact ? 72 : 80;
+  const avatarSize = compact ? 58 : 66;
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.992 : 1 }] }]}>
       <LinearGradient colors={['rgba(12, 13, 34, 0.92)', 'rgba(8, 8, 24, 0.88)']} style={[styles.card, { borderColor: palette.border, shadowColor: palette.shadow }, compact && styles.cardCompact]}>
-        <View style={[styles.avatarRail, { width: avatarSize + 18 }]}>
-          <LinearGradient colors={['#FF4FB9', '#7B58FF', '#55C8FF']} style={[styles.avatarRing, { width: avatarSize + 10, height: avatarSize + 10, borderRadius: (avatarSize + 10) / 2 }]}>
+        <View style={[styles.avatarRail, { width: avatarSize + 12 }]}>
+          <LinearGradient colors={['#FF4FB9', '#7B58FF', '#55C8FF']} style={[styles.avatarRing, { width: avatarSize + 8, height: avatarSize + 8, borderRadius: (avatarSize + 8) / 2 }]}>
             <View style={[styles.avatarCore, { borderRadius: avatarSize / 2 }]}>
               <Avatar avatar={avatar} size={avatarSize} />
             </View>
@@ -113,19 +113,19 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 132,
-    borderRadius: 30,
+    minHeight: 112,
+    borderRadius: 28,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     shadowOpacity: 0.35,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
   },
   cardCompact: {
-    minHeight: 120,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    minHeight: 102,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   avatarRail: {
     alignItems: 'center',
@@ -142,11 +142,11 @@ const styles = StyleSheet.create({
   },
   onlineDot: {
     position: 'absolute',
-    right: 6,
-    bottom: 10,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    right: 4,
+    bottom: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: '#2CFB72',
     borderWidth: 2,
     borderColor: '#0B0D20',
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   mainCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 7,
+    gap: 5,
   },
   nameRow: {
     flexDirection: 'row',
@@ -163,11 +163,11 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: '900',
   },
   nameCompact: {
-    fontSize: 19,
+    fontSize: 17,
   },
   onlineState: {
     flexDirection: 'row',
@@ -180,36 +180,36 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   onlineText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   planPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
   planText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
   },
   statText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   divider: {
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     width: '100%',
-    height: 8,
+    height: 5,
     borderRadius: 999,
     overflow: 'hidden',
   },
@@ -230,19 +230,19 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   message: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
   badgeRail: {
-    width: 78,
+    width: 64,
     alignItems: 'center',
-    gap: 5,
-    marginLeft: 8,
+    gap: 3,
+    marginLeft: 6,
   },
   levelBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
+    width: 50,
+    height: 50,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -253,15 +253,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   levelBadgeCompact: {
-    width: 58,
-    height: 58,
+    width: 46,
+    height: 46,
   },
   levelText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   levelPercent: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
 });

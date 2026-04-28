@@ -177,7 +177,7 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
   const gap = short ? 8 : 10;
   const available = height - insetsTop - insetsBottom - topPadding - bottomPadding - gap * 5;
   const topHeight = Math.round(Math.min(60, Math.max(50, available * 0.075)));
-  const profileHeight = Math.round(Math.min(156, Math.max(132, available * 0.18)));
+  const profileHeight = Math.round(Math.min(128, Math.max(108, available * 0.145)));
   const ctaBlockHeight = Math.round(Math.min(246, Math.max(198, available * 0.255)));
   const autoHeight = Math.round(Math.min(90, Math.max(74, available * 0.11)));
   const bottomHeight = Math.round(Math.min(90, Math.max(74, available * 0.11)));
