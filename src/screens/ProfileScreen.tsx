@@ -13,6 +13,7 @@ import { colors, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { badges, getAvatarById, receivedGifts } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { FriendRequestItem, MembershipPlan } from '../types';
 
 const USERNAME_CHANGE_WINDOW_DAYS = 7;
 
@@ -22,8 +23,79 @@ function getRemainingDays(lastChangeDate: string) {
   return Math.max(0, USERNAME_CHANGE_WINDOW_DAYS - fullDaysElapsed);
 }
 
+function getPlanBadge(plan: MembershipPlan) {
+  if (plan === 'vip') {
+    return {
+      label: 'VIP',
+      icon: 'trophy' as const,
+      color: colors.goldSoft,
+      background: 'rgba(231, 188, 78, 0.14)',
+    };
+  }
+
+  return {
+    label: 'Plus',
+    icon: 'flash' as const,
+    color: colors.cyan,
+    background: 'rgba(80, 143, 255, 0.16)',
+  };
+}
+
+function FriendRequestRow({
+  request,
+  onAccept,
+  onReject,
+}: {
+  request: FriendRequestItem;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
+  const avatar = getAvatarById(request.avatarId);
+  const badge = getPlanBadge(request.plan);
+
+  return (
+    <View style={styles.requestRow}>
+      <View style={styles.requestIdentity}>
+        <Avatar avatar={avatar} size={42} />
+        <View style={styles.requestCopy}>
+          <Text numberOfLines={1} style={styles.requestName}>
+            {request.username}
+          </Text>
+          <View style={[styles.requestBadge, { backgroundColor: badge.background }]}>
+            <Ionicons color={badge.color} name={badge.icon} size={12} />
+            <Text numberOfLines={1} style={[styles.requestBadgeText, { color: badge.color }]}>
+              {badge.label}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.requestActions}>
+        <Pressable onPress={onAccept} style={[styles.requestAction, styles.requestAccept]}>
+          <Text numberOfLines={1} style={styles.requestActionText}>
+            Kabul et
+          </Text>
+        </Pressable>
+        <Pressable onPress={onReject} style={[styles.requestAction, styles.requestReject]}>
+          <Text numberOfLines={1} style={styles.requestActionText}>
+            Reddet
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
-  const { profile, updateUsername, userLevel, userScore } = useAppState();
+  const {
+    profile,
+    updateUsername,
+    userLevel,
+    userScore,
+    pendingIncomingFriendRequests,
+    acceptFriendRequest,
+    rejectFriendRequest,
+  } = useAppState();
   const [usernameDraft, setUsernameDraft] = useState(profile.username);
   const [reportVisible, setReportVisible] = useState(false);
   const [usernameNoticeVisible, setUsernameNoticeVisible] = useState(false);
@@ -106,6 +178,24 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
             <Text style={styles.infoValue}>{profile.joinDate}</Text>
           </View>
         </View>
+      </GlassCard>
+
+      <GlassCard style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Gelen arkadaşlık istekleri</Text>
+        {pendingIncomingFriendRequests.length === 0 ? (
+          <Text style={styles.emptyState}>Şu an bekleyen arkadaşlık isteği yok.</Text>
+        ) : (
+          <View style={styles.requestList}>
+            {pendingIncomingFriendRequests.map((request) => (
+              <FriendRequestRow
+                key={`${request.id}-${request.createdAt}`}
+                onAccept={() => acceptFriendRequest(request.id)}
+                onReject={() => rejectFriendRequest(request.id)}
+                request={request}
+              />
+            ))}
+          </View>
+        )}
       </GlassCard>
 
       <GlassCard style={styles.sectionCard}>
@@ -289,6 +379,77 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: '700',
+  },
+  requestList: {
+    gap: spacing.sm,
+  },
+  requestRow: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  requestIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  requestCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  requestName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  requestBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  requestBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  requestAction: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  requestAccept: {
+    backgroundColor: 'rgba(80, 143, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(80, 143, 255, 0.38)',
+  },
+  requestReject: {
+    backgroundColor: 'rgba(255, 92, 154, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 92, 154, 0.34)',
+  },
+  requestActionText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyState: {
+    color: colors.muted,
+    lineHeight: 18,
+    fontSize: 12,
   },
   note: {
     color: colors.dim,

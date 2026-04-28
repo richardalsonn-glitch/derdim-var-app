@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, Vibration, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +8,11 @@ import { Avatar } from '../components/Avatar';
 import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GiftCelebrationOverlay, GiftModal } from '../components/GiftModal';
 import { NoticeModal } from '../components/NoticeModal';
-import { colors, gradients, layout, radius, spacing } from '../constants/theme';
+import { colors, gradients, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, topics } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
-import { Gender, GiftItem, MembershipPlan, TopicTag } from '../types';
+import { FriendRequestItem, FriendSummary, Gender, GiftItem, MembershipPlan, TopicTag } from '../types';
 
 type CallPhase = 'searching' | 'matched';
 
@@ -87,7 +87,7 @@ function getMetrics(width: number, height: number): Metrics {
   const gap = short ? 6 : compact ? 8 : 10;
   const tinyGap = short ? 4 : 6;
   const usableWidth = Math.min(layout.maxWidth, width) - horizontalPadding * 2;
-  const ring = clamp(Math.min(usableWidth - 56, height * 0.29), 204, compact ? 252 : 282);
+  const ring = clamp(Math.min(usableWidth - 50, height * 0.29), 204, compact ? 248 : 278);
 
   return {
     horizontalPadding,
@@ -103,9 +103,9 @@ function getMetrics(width: number, height: number): Metrics {
     sideColumnWidth: compact ? 100 : 110,
     autoHeight: short ? 58 : 64,
     ring,
-    gift: short ? 72 : compact ? 76 : 82,
+    gift: short ? 64 : compact ? 68 : 72,
     topicHeight: short ? 72 : 80,
-    likeHeight: short ? 58 : 66,
+    likeHeight: short ? 62 : 70,
     bottomHeight: short ? 96 : 106,
     controlSize: short ? 56 : 60,
     endSize: short ? 66 : 70,
@@ -131,10 +131,25 @@ function getBadge(plan: MembershipPlan) {
   };
 }
 
+function getUntilNextReset() {
+  const now = new Date();
+  const nextReset = new Date(now);
+  nextReset.setHours(24, 0, 0, 0);
+  const diffMs = Math.max(0, nextReset.getTime() - now.getTime());
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  return `${hours}s ${minutes}dk`;
+}
+
 function TopicChip({ label, selected, compact, onPress }: TopicChipProps) {
   return (
     <Pressable onPress={onPress} style={[styles.topicChip, compact && styles.topicChipCompact, selected && styles.topicChipSelected]}>
-      <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.topicChipText, compact && styles.topicChipTextCompact, selected && styles.topicChipTextSelected]}>
+      <Text
+        adjustsFontSizeToFit
+        minimumFontScale={0.82}
+        numberOfLines={1}
+        style={[styles.topicChipText, compact && styles.topicChipTextCompact, selected && styles.topicChipTextSelected]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -164,7 +179,18 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     penalizeMatch,
     registerSkip,
     skipCount,
+    dailyAppreciationLimit,
+    dailyAppreciationUsed,
+    blockedUserIds,
+    countdownAlertsEnabled,
+    friendRequests,
     useDailyAppreciation,
+    renewDailyAppreciation,
+    blockUser,
+    sendFriendRequest,
+    receiveFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
   } = useAppState();
   const { width, height } = useWindowDimensions();
   const metrics = useMemo(() => getMetrics(width, height), [width, height]);
@@ -175,20 +201,28 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   const [giftVisible, setGiftVisible] = useState(false);
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
   const [giftOverlayVisible, setGiftOverlayVisible] = useState(false);
-  const [friendModalVisible, setFriendModalVisible] = useState(false);
-  const [safetyModalVisible, setSafetyModalVisible] = useState(false);
+  const [friendNoticeVisible, setFriendNoticeVisible] = useState(false);
+  const [blockConfirmVisible, setBlockConfirmVisible] = useState(false);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [likeNoticeVisible, setLikeNoticeVisible] = useState(false);
+  const [likeNoticeMessage, setLikeNoticeMessage] = useState('Bu kişi sana iyi geldi olarak işaretlendi.');
   const [likeLimitVisible, setLikeLimitVisible] = useState(false);
+  const [likeResetCountdown, setLikeResetCountdown] = useState(getUntilNextReset());
   const [micEnabled, setMicEnabled] = useState(true);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
   const [peerMuted, setPeerMuted] = useState(false);
   const [partner, setPartner] = useState<MatchPartner>(partners[0]);
   const [partnerScore, setPartnerScore] = useState(partners[0].dermanScore);
+  const [partnerLiked, setPartnerLiked] = useState(false);
+  const [likedThisMatch, setLikedThisMatch] = useState(false);
+  const [incomingFriendRequestId, setIncomingFriendRequestId] = useState<string | null>(null);
+  const [incomingFriendPrompted, setIncomingFriendPrompted] = useState(false);
   const isMatched = phase === 'matched';
   const partnerAvatar = useMemo(() => getAvatarById(partner.avatarId), [partner.avatarId]);
   const partnerBadge = getBadge(partner.plan);
   const giftBonusSeconds = profile.plan === 'vip' ? 600 : 300;
+  const lastCountdownAlertRef = useRef<number | null>(null);
+  const remainingLikes = Math.max(0, dailyAppreciationLimit - dailyAppreciationUsed);
 
   const { remainingSeconds, addSeconds, reset, setIsRunning } = useCountdownTimer({
     initialSeconds: CALL_SECONDS,
@@ -198,7 +232,57 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     },
   });
 
+  const incomingFriendRequest = useMemo(
+    () =>
+      friendRequests.find(
+        (request) => request.id === incomingFriendRequestId && request.direction === 'incoming' && request.status === 'pending',
+      ) ?? null,
+    [friendRequests, incomingFriendRequestId],
+  );
+
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setLikeResetCountdown(getUntilNextReset());
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, []);
+
+  useEffect(() => {
+    if (!isMatched || !countdownAlertsEnabled || remainingSeconds > 10 || remainingSeconds <= 0) {
+      lastCountdownAlertRef.current = null;
+      return;
+    }
+
+    if (lastCountdownAlertRef.current === remainingSeconds) {
+      return;
+    }
+
+    lastCountdownAlertRef.current = remainingSeconds;
+
+    // TODO: production countdown beep audio asset eklenecek.
+    // TODO: bu geri sayım uyarısı ileride realtime ile iki taraf için senkron tetiklenecek.
+    Vibration.vibrate(45);
+  }, [countdownAlertsEnabled, isMatched, remainingSeconds]);
+
+  function getPartnerSummary(matchPartner: MatchPartner): FriendSummary {
+    return {
+      id: matchPartner.id,
+      username: matchPartner.username,
+      avatarId: matchPartner.avatarId,
+      plan: matchPartner.plan,
+    };
+  }
+
   function selectPartner(nextSeed: number) {
+    for (let offset = 0; offset < partners.length; offset += 1) {
+      const candidate = partners[(nextSeed + skipCount + offset) % partners.length];
+
+      if (!blockedUserIds.includes(candidate.id)) {
+        return candidate;
+      }
+    }
+
     return partners[(nextSeed + skipCount) % partners.length];
   }
 
@@ -206,6 +290,8 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     const nextPartner = selectPartner(nextSeed);
     setPartner(nextPartner);
     setPartnerScore(nextPartner.dermanScore);
+    setPartnerLiked((nextSeed + nextPartner.level) % 2 === 0);
+    setLikedThisMatch(false);
     setPhase('searching');
     setSearchRemaining(SEARCH_SECONDS);
     setMicEnabled(true);
@@ -214,13 +300,15 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     setGiftVisible(false);
     setGiftOverlayVisible(false);
     setSelectedGift(null);
+    setIncomingFriendRequestId(null);
+    setIncomingFriendPrompted(false);
     reset(CALL_SECONDS, false);
     setIsRunning(false);
   }
 
   useEffect(() => {
     startSearch(matchSeed);
-  }, [matchSeed, skipCount]);
+  }, [blockedUserIds, matchSeed, skipCount]);
 
   useEffect(() => {
     if (phase !== 'searching') {
@@ -242,6 +330,20 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
 
     return () => clearInterval(timerId);
   }, [phase, reset]);
+
+  useEffect(() => {
+    if (!isMatched || incomingFriendPrompted) {
+      return;
+    }
+
+    const timerId = setTimeout(() => {
+      const request = receiveFriendRequest(getPartnerSummary(partner));
+      setIncomingFriendRequestId(request.id);
+      setIncomingFriendPrompted(true);
+    }, 9000);
+
+    return () => clearTimeout(timerId);
+  }, [incomingFriendPrompted, isMatched, partner, receiveFriendRequest]);
 
   function beginNextMatch() {
     setReviewVisible(false);
@@ -270,6 +372,10 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   }
 
   function handleLike() {
+    if (likedThisMatch) {
+      return;
+    }
+
     const result = useDailyAppreciation();
 
     if (!result.allowed) {
@@ -277,14 +383,51 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
       return;
     }
 
-    setPartnerScore((current) => Math.min(5, Number((current + 0.1).toFixed(1))));
-    addSeconds(30);
+    const mutualLike = partnerLiked;
+    const secondsBonus = profile.plan === 'free' ? (mutualLike ? 60 : 30) : mutualLike ? 90 : 45;
+    setPartnerScore((current) => Math.min(5, Number((current + (mutualLike ? 0.2 : 0.1)).toFixed(1))));
+    addSeconds(secondsBonus);
+    setLikedThisMatch(true);
+    setLikeNoticeMessage(
+      mutualLike
+        ? `Karşılıklı beğeniyle +${secondsBonus} sn kazandınız.`
+        : `Tek taraflı beğeniyle +${secondsBonus} sn kazandınız.`,
+    );
     setLikeNoticeVisible(true);
   }
 
   function handlePass() {
     registerSkip();
     beginNextMatch();
+  }
+
+  function handleBlockConfirmed() {
+    blockUser(getPartnerSummary(partner));
+    setBlockConfirmVisible(false);
+    setReviewVisible(false);
+    setIsRunning(false);
+    beginNextMatch();
+  }
+
+  function handleFriendRequestSend() {
+    sendFriendRequest(getPartnerSummary(partner));
+    setFriendNoticeVisible(true);
+  }
+
+  function handleIncomingFriendRequest(action: 'accept' | 'reject' | 'ignore') {
+    if (!incomingFriendRequest) {
+      return;
+    }
+
+    if (action === 'accept') {
+      acceptFriendRequest(incomingFriendRequest.id);
+    }
+
+    if (action === 'reject') {
+      rejectFriendRequest(incomingFriendRequest.id);
+    }
+
+    setIncomingFriendRequestId(null);
   }
 
   return (
@@ -322,7 +465,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                 </Text>
               </View>
 
-              <Pressable onPress={() => setSafetyModalVisible(true)} style={[styles.reportButton, { height: metrics.reportHeight, width: metrics.reportWidth }]}>
+              <Pressable onPress={() => setBlockConfirmVisible(true)} style={[styles.reportButton, { height: metrics.reportHeight, width: metrics.reportWidth }]}>
                 <Ionicons color={colors.danger} name="alert-circle" size={15} />
                 <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.reportButtonText}>
                   Engelle / Şikayet
@@ -376,7 +519,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
               </View>
 
               <View style={[styles.sideActions, { width: metrics.sideColumnWidth, gap: metrics.tinyGap }]}>
-                <Pressable onPress={() => setFriendModalVisible(true)} style={[styles.sideActionButton, { height: metrics.sideButtonHeight }]}>
+                <Pressable onPress={handleFriendRequestSend} style={[styles.sideActionButton, { height: metrics.sideButtonHeight }]}>
                   <Ionicons color={colors.text} name="person-add" size={16} />
                   <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.sideActionText}>
                     Arkadaş Ekle
@@ -413,7 +556,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
           <View style={styles.ringSection}>
             <View style={[styles.ringWrap, { minHeight: metrics.ring + 10 }]}>
               <CountdownRing
-                promoText={isMatched ? `Hediye ile +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
+                promoText={isMatched ? `Hediye: +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
                 promoIcon="gift"
                 remainingSeconds={isMatched ? remainingSeconds : searchRemaining}
                 segmentCount={76}
@@ -434,14 +577,14 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                     width: metrics.gift,
                     height: metrics.gift,
                     borderRadius: metrics.gift / 2,
-                    bottom: 2,
-                    right: clamp((Math.min(layout.maxWidth, width) - metrics.horizontalPadding * 2 - metrics.ring) / 2 - 6, -2, 18),
+                    bottom: 8,
+                    right: clamp((Math.min(layout.maxWidth, width) - metrics.horizontalPadding * 2 - metrics.ring) / 2 - 16, 4, 20),
                   },
                   !isMatched && styles.giftButtonDisabled,
                 ]}
               >
                 <LinearGradient colors={['rgba(255, 84, 176, 0.98)', 'rgba(126, 74, 255, 0.96)']} style={styles.giftGradient}>
-                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 22 : 24} />
+                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 20 : 22} />
                   <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={2} style={styles.giftButtonText}>
                     Hediye{'\n'}Gönder
                   </Text>
@@ -469,11 +612,19 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
             </View>
 
             <View style={[styles.likeCard, { height: metrics.likeHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
-              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.likeText}>
-                İyi geldiyse beğen
-              </Text>
+              <View style={styles.likeCopy}>
+                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.likeText}>
+                  Beğenirseniz süre uzar.
+                </Text>
+                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.likeSubtext}>
+                  Tek taraflı beğeni +30 sn, karşılıklı beğeni +60 sn kazandırır.
+                </Text>
+                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.likeLimitText}>
+                  Bugünkü hak: {remainingLikes}/{dailyAppreciationLimit}
+                </Text>
+              </View>
 
-              <Pressable disabled={!isMatched} onPress={handleLike} style={[styles.likeButton, !isMatched && styles.likeButtonDisabled]}>
+              <Pressable disabled={!isMatched || likedThisMatch} onPress={handleLike} style={[styles.likeButton, (!isMatched || likedThisMatch) && styles.likeButtonDisabled]}>
                 <LinearGradient colors={['rgba(255, 84, 176, 0.98)', 'rgba(156, 71, 255, 0.98)']} style={styles.likeGradient}>
                   <Ionicons color={colors.text} name="heart" size={18} />
                   <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.likeButtonText}>
@@ -531,21 +682,20 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
       <GiftCelebrationOverlay gift={selectedGift} visible={giftOverlayVisible} />
 
       <NoticeModal
-        actions={[{ label: 'Tamam', onPress: () => setFriendModalVisible(false), variant: 'secondary' }]}
+        actions={[{ label: 'Tamam', onPress: () => setFriendNoticeVisible(false), variant: 'secondary' }]}
         message="Arkadaşlık isteği gönderildi."
         title="İstek gönderildi"
-        visible={friendModalVisible}
+        visible={friendNoticeVisible}
       />
 
       <NoticeModal
         actions={[
-          { label: 'Şikayet Et', onPress: () => setSafetyModalVisible(false), variant: 'gold' },
-          { label: 'Engelle', onPress: () => setSafetyModalVisible(false), variant: 'secondary' },
-          { label: 'Vazgeç', onPress: () => setSafetyModalVisible(false), variant: 'ghost' },
+          { label: 'Evet, engelle', onPress: handleBlockConfirmed, variant: 'gold' },
+          { label: 'Hayır', onPress: () => setBlockConfirmVisible(false), variant: 'ghost' },
         ]}
-        message="Bu kullanıcı için güvenlik işlemi başlatmak ister misin?"
-        title="Engelle / Şikayet Et"
-        visible={safetyModalVisible}
+        message="Evet dersen görüşme hemen biter ve yeni eşleşme aranmaya başlanır."
+        title="Bu kullanıcıyı engellemek istiyor musun?"
+        visible={blockConfirmVisible}
       />
 
       <NoticeModal
@@ -576,16 +726,45 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
 
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setLikeNoticeVisible(false), variant: 'secondary' }]}
-        message="Bu kişi sana iyi geldi olarak işaretlendi."
+        message={likeNoticeMessage}
         title="Beğeni gönderildi"
         visible={likeNoticeVisible}
       />
 
       <NoticeModal
-        actions={[{ label: 'Tamam', onPress: () => setLikeLimitVisible(false), variant: 'secondary' }]}
-        message="Hakkınız bitmiştir. Günlük olarak yenilenmektedir."
-        title="Beğeni hakkı doldu"
+        actions={[
+          {
+            label: '19.99 TRY ile yenile',
+            onPress: () => {
+              renewDailyAppreciation();
+              setLikeLimitVisible(false);
+            },
+            variant: 'gold',
+          },
+          {
+            label: 'Plus / VIP’a geç',
+            onPress: () => {
+              setLikeLimitVisible(false);
+              navigation.navigate('Packages');
+            },
+            variant: 'secondary',
+          },
+          { label: 'Vazgeç', onPress: () => setLikeLimitVisible(false), variant: 'ghost' },
+        ]}
+        message={`Hakkın günlük yenilenir. Hemen devam etmek için hakkını yenileyebilir veya Plus/VIP’a geçebilirsin.\n\nYenilenmeye kalan: ${likeResetCountdown}`}
+        title="Günlük beğenme hakkın bitti"
         visible={likeLimitVisible}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Kabul et', onPress: () => handleIncomingFriendRequest('accept'), variant: 'secondary' },
+          { label: 'Reddet', onPress: () => handleIncomingFriendRequest('reject'), variant: 'ghost' },
+          { label: 'Yoksay', onPress: () => handleIncomingFriendRequest('ignore'), variant: 'gold' },
+        ]}
+        message={`${incomingFriendRequest?.username ?? 'Bu kullanıcı'} seni arkadaş olarak eklemek istiyor.`}
+        title="Arkadaşlık isteği"
+        visible={Boolean(incomingFriendRequest)}
       />
     </LinearGradient>
   );
@@ -958,11 +1137,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
-  likeText: {
+  likeCopy: {
     flex: 1,
     minWidth: 0,
+    gap: 1,
+  },
+  likeText: {
     color: '#D8B3FF',
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  likeSubtext: {
+    color: colors.text,
+    fontSize: 9,
+    opacity: 0.82,
+  },
+  likeLimitText: {
+    color: colors.goldSoft,
+    fontSize: 9,
     fontWeight: '700',
   },
   likeButton: {

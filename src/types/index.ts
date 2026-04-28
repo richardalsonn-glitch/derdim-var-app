@@ -88,3 +88,20 @@ export type AppProfile = {
   lastUsernameChangeDate: string;
   autoCallEnabled: boolean;
 };
+
+export type FriendRequestDirection = 'incoming' | 'outgoing';
+
+export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected';
+
+export type FriendSummary = {
+  id: string;
+  username: string;
+  avatarId: string;
+  plan: MembershipPlan;
+};
+
+export type FriendRequestItem = FriendSummary & {
+  direction: FriendRequestDirection;
+  status: FriendRequestStatus;
+  createdAt: string;
+};

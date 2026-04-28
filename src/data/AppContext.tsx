@@ -1,7 +1,7 @@
 import { PropsWithChildren, createContext, useContext, useMemo, useState } from 'react';
 
 import { defaultProfile, getAvatarById, topics } from './mockData';
-import { AppProfile, MatchRole, MembershipPlan, TopicTag } from '../types';
+import { AppProfile, FriendRequestItem, FriendSummary, MatchRole, MembershipPlan, TopicTag } from '../types';
 
 function getLevelFromScore(score: number) {
   if (score >= 500) {
@@ -34,6 +34,8 @@ type DailyAppreciationResult = {
   limit: number;
 };
 
+type FriendRequestDraft = FriendSummary;
+
 type AppContextValue = {
   profile: AppProfile;
   activeRole: MatchRole;
@@ -43,11 +45,17 @@ type AppContextValue = {
   skipCount: number;
   dailyAppreciationUsed: number;
   dailyAppreciationLimit: number;
+  blockedUserIds: string[];
+  friendRequests: FriendRequestItem[];
+  pendingIncomingFriendRequests: FriendRequestItem[];
+  friends: FriendSummary[];
+  countdownAlertsEnabled: boolean;
   updateProfile: (patch: Partial<AppProfile>) => void;
   updateUsername: (username: string) => void;
   setPlan: (plan: MembershipPlan) => void;
   setAvatar: (avatarId: string) => void;
   setAutoCallEnabled: (value: boolean) => void;
+  setCountdownAlertsEnabled: (value: boolean) => void;
   setActiveRole: (role: MatchRole) => void;
   setActiveTopic: (topic: TopicTag) => void;
   adjustScore: (delta: number) => void;
@@ -55,6 +63,12 @@ type AppContextValue = {
   penalizeMatch: () => void;
   registerSkip: () => void;
   useDailyAppreciation: () => DailyAppreciationResult;
+  renewDailyAppreciation: () => void;
+  blockUser: (user: FriendSummary) => void;
+  sendFriendRequest: (user: FriendRequestDraft) => FriendRequestItem;
+  receiveFriendRequest: (user: FriendRequestDraft) => FriendRequestItem;
+  acceptFriendRequest: (requestId: string) => void;
+  rejectFriendRequest: (requestId: string) => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -66,9 +80,15 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [userScore, setUserScore] = useState(92);
   const [skipCount, setSkipCount] = useState(0);
   const [dailyAppreciationUsage, setDailyAppreciationUsage] = useState({ dateKey: getTodayKey(), used: 0 });
+  const [blockedUsers, setBlockedUsers] = useState<FriendSummary[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequestItem[]>([]);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [countdownAlertsEnabled, setCountdownAlertsEnabled] = useState(true);
   const userLevel = getLevelFromScore(userScore);
   const effectiveUsage = dailyAppreciationUsage.dateKey === getTodayKey() ? dailyAppreciationUsage.used : 0;
   const dailyAppreciationLimit = getDailyAppreciationLimit(profile.plan);
+  const blockedUserIds = blockedUsers.map((user) => user.id);
+  const pendingIncomingFriendRequests = friendRequests.filter((request) => request.direction === 'incoming' && request.status === 'pending');
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -80,6 +100,11 @@ export function AppProvider({ children }: PropsWithChildren) {
       skipCount,
       dailyAppreciationUsed: effectiveUsage,
       dailyAppreciationLimit,
+      blockedUserIds,
+      friendRequests,
+      pendingIncomingFriendRequests,
+      friends,
+      countdownAlertsEnabled,
       updateProfile: (patch) => {
         setProfile((current) => {
           const next = { ...current, ...patch };
@@ -107,6 +132,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setAutoCallEnabled: (value) => {
         setProfile((current) => ({ ...current, autoCallEnabled: value }));
       },
+      setCountdownAlertsEnabled,
       setActiveRole,
       setActiveTopic,
       adjustScore: (delta) => {
@@ -150,8 +176,90 @@ export function AppProvider({ children }: PropsWithChildren) {
           limit: nextLimit,
         };
       },
+      renewDailyAppreciation: () => {
+        setDailyAppreciationUsage({ dateKey: getTodayKey(), used: 0 });
+      },
+      blockUser: (user) => {
+        setBlockedUsers((current) => (current.some((item) => item.id === user.id) ? current : [...current, user]));
+      },
+      sendFriendRequest: (user) => {
+        const now = new Date().toISOString();
+        const existingRequest =
+          friendRequests.find((request) => request.id === user.id && request.direction === 'outgoing' && request.status !== 'rejected') ??
+          friendRequests.find((request) => request.id === user.id && request.direction === 'incoming' && request.status === 'pending');
+
+        if (existingRequest) {
+          return existingRequest;
+        }
+
+        const request: FriendRequestItem = {
+          ...user,
+          direction: 'outgoing',
+          status: 'pending',
+          createdAt: now,
+        };
+
+        setFriendRequests((current) => [...current, request]);
+        return request;
+      },
+      receiveFriendRequest: (user) => {
+        const now = new Date().toISOString();
+        const existingRequest =
+          friendRequests.find((request) => request.id === user.id && request.direction === 'incoming' && request.status === 'pending') ??
+          friendRequests.find((request) => request.id === user.id && request.status === 'accepted');
+
+        if (existingRequest) {
+          return existingRequest;
+        }
+
+        const request: FriendRequestItem = {
+          ...user,
+          direction: 'incoming',
+          status: 'pending',
+          createdAt: now,
+        };
+
+        setFriendRequests((current) => [...current, request]);
+        return request;
+      },
+      acceptFriendRequest: (requestId) => {
+        const targetRequest = friendRequests.find((request) => request.id === requestId);
+
+        if (!targetRequest) {
+          return;
+        }
+
+        setFriendRequests((current) =>
+          current.map((request) => (request.id === requestId ? { ...request, status: 'accepted' } : request)),
+        );
+        setFriends((current) =>
+          current.some((friend) => friend.id === targetRequest.id)
+            ? current
+            : [...current, { id: targetRequest.id, username: targetRequest.username, avatarId: targetRequest.avatarId, plan: targetRequest.plan }],
+        );
+      },
+      rejectFriendRequest: (requestId) => {
+        setFriendRequests((current) =>
+          current.map((request) => (request.id === requestId ? { ...request, status: 'rejected' } : request)),
+        );
+      },
     }),
-    [activeRole, activeTopic, dailyAppreciationLimit, dailyAppreciationUsage, effectiveUsage, profile, skipCount, userLevel, userScore],
+    [
+      activeRole,
+      activeTopic,
+      blockedUserIds,
+      countdownAlertsEnabled,
+      dailyAppreciationLimit,
+      dailyAppreciationUsage,
+      effectiveUsage,
+      friendRequests,
+      friends,
+      pendingIncomingFriendRequests,
+      profile,
+      skipCount,
+      userLevel,
+      userScore,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
