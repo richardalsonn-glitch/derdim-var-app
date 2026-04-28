@@ -19,6 +19,21 @@ function getLevelFromScore(score: number) {
   return 1;
 }
 
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getDailyAppreciationLimit(plan: MembershipPlan) {
+  return plan === 'free' ? 2 : 5;
+}
+
+type DailyAppreciationResult = {
+  allowed: boolean;
+  used: number;
+  remaining: number;
+  limit: number;
+};
+
 type AppContextValue = {
   profile: AppProfile;
   activeRole: MatchRole;
@@ -26,6 +41,8 @@ type AppContextValue = {
   userScore: number;
   userLevel: number;
   skipCount: number;
+  dailyAppreciationUsed: number;
+  dailyAppreciationLimit: number;
   updateProfile: (patch: Partial<AppProfile>) => void;
   updateUsername: (username: string) => void;
   setPlan: (plan: MembershipPlan) => void;
@@ -37,6 +54,7 @@ type AppContextValue = {
   rewardMatch: () => void;
   penalizeMatch: () => void;
   registerSkip: () => void;
+  useDailyAppreciation: () => DailyAppreciationResult;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -47,7 +65,10 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [activeTopic, setActiveTopic] = useState<TopicTag>(topics[0]);
   const [userScore, setUserScore] = useState(92);
   const [skipCount, setSkipCount] = useState(0);
+  const [dailyAppreciationUsage, setDailyAppreciationUsage] = useState({ dateKey: getTodayKey(), used: 0 });
   const userLevel = getLevelFromScore(userScore);
+  const effectiveUsage = dailyAppreciationUsage.dateKey === getTodayKey() ? dailyAppreciationUsage.used : 0;
+  const dailyAppreciationLimit = getDailyAppreciationLimit(profile.plan);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -57,6 +78,8 @@ export function AppProvider({ children }: PropsWithChildren) {
       userScore,
       userLevel,
       skipCount,
+      dailyAppreciationUsed: effectiveUsage,
+      dailyAppreciationLimit,
       updateProfile: (patch) => {
         setProfile((current) => {
           const next = { ...current, ...patch };
@@ -99,8 +122,36 @@ export function AppProvider({ children }: PropsWithChildren) {
         setSkipCount((current) => current + 1);
         setUserScore((current) => Math.max(0, current - 8));
       },
+      useDailyAppreciation: () => {
+        const todayKey = getTodayKey();
+        const nextLimit = getDailyAppreciationLimit(profile.plan);
+        const currentUsed = dailyAppreciationUsage.dateKey === todayKey ? dailyAppreciationUsage.used : 0;
+
+        if (currentUsed >= nextLimit) {
+          if (dailyAppreciationUsage.dateKey !== todayKey) {
+            setDailyAppreciationUsage({ dateKey: todayKey, used: 0 });
+          }
+
+          return {
+            allowed: false,
+            used: currentUsed,
+            remaining: 0,
+            limit: nextLimit,
+          };
+        }
+
+        const nextUsed = currentUsed + 1;
+        setDailyAppreciationUsage({ dateKey: todayKey, used: nextUsed });
+
+        return {
+          allowed: true,
+          used: nextUsed,
+          remaining: Math.max(0, nextLimit - nextUsed),
+          limit: nextLimit,
+        };
+      },
     }),
-    [activeRole, activeTopic, profile, skipCount, userLevel, userScore],
+    [activeRole, activeTopic, dailyAppreciationLimit, dailyAppreciationUsage, effectiveUsage, profile, skipCount, userLevel, userScore],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
