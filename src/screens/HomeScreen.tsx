@@ -505,17 +505,12 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       <View
         pointerEvents="box-none"
         style={[
-          styles.bottomBarWrap,
+          styles.bottomTabBar,
           {
-            left: 16,
-            right: 16,
-            bottom: metrics.tabBarOffset,
+            bottom: Math.max(insets.bottom - 2, 4),
           },
-        ]}
-      >
-        <View style={[styles.bottomBarInner, { height: metrics.tabBarHeight }]}>
-          <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
-        </View>
+        ]}>
+        <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
       </View>
 
       <DrawerMenu
@@ -600,10 +595,12 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 0 },
   },
-  bottomBarWrap: {
+  bottomTabBar: {
     position: 'absolute',
-  },
-  bottomBarInner: {
-    width: '100%',
+    left: 18,
+    right: 18,
+    height: 78,
+    borderRadius: 28,
+    zIndex: 50,
   },
 });
