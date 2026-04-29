@@ -39,6 +39,8 @@ export function BottomTabBar({ activeKey, items, palette, compact = false, onSel
 
 const styles = StyleSheet.create({
   bar: {
+    width: '100%',
+    height: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',

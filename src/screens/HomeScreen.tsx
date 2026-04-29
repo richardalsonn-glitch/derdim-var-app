@@ -177,8 +177,8 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
   const gap = short ? 10 : 12;
   const ctaGap = compact ? 18 : 20;
   const tabBarHeight = compact ? 74 : 78;
-  const tabBarOffset = insetsBottom > 0 ? Math.max(6, insetsBottom - 4) : 4;
-  const contentPaddingBottom = tabBarHeight + tabBarOffset + 10;
+  const tabBarOffset = Math.max(insetsBottom - 2, 4);
+  const contentPaddingBottom = tabBarHeight + tabBarOffset + 12;
   const available = height - insetsTop - topPadding - contentPaddingBottom - gap * 4;
   const topHeight = Math.round(Math.min(60, Math.max(48, available * 0.076)));
   const profileHeight = Math.round(Math.min(136, Math.max(114, available * 0.16)));
@@ -600,6 +600,7 @@ const styles = StyleSheet.create({
     right: 18,
     height: 78,
     borderRadius: 28,
+    justifyContent: 'flex-end',
     zIndex: 50,
   },
 });
