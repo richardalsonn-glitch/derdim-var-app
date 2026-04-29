@@ -42,6 +42,7 @@ type HomeMetrics = {
   autoHeight: number;
   featureBlockHeight: number;
   featureCardHeight: number;
+  featureOffset: number;
   tabBarHeight: number;
   tabBarOffset: number;
   iconButton: number;
@@ -175,16 +176,18 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
   const sidePadding = compact ? 14 : 18;
   const topPadding = compact ? 6 : 8;
   const gap = short ? 10 : 12;
-  const ctaGap = compact ? 18 : 20;
-  const tabBarHeight = compact ? 74 : 78;
-  const tabBarOffset = Math.max(insetsBottom - 2, 4);
+  const ctaGapBase = compact ? 18 : 20;
+  const ctaGap = ctaGapBase + 6;
+  const tabBarHeight = 76;
+  const tabBarOffset = 4;
   const contentPaddingBottom = tabBarHeight + tabBarOffset + 12;
   const available = height - insetsTop - topPadding - contentPaddingBottom - gap * 4;
   const topHeight = Math.round(Math.min(60, Math.max(48, available * 0.076)));
   const profileHeight = Math.round(Math.min(136, Math.max(114, available * 0.16)));
-  const ctaBlockHeight = Math.round(Math.min(236, Math.max(188, available * 0.24)) * 0.95);
+  const ctaBlockHeight = Math.round(Math.min(236, Math.max(188, available * 0.24)) * 0.95) + (ctaGap - ctaGapBase);
   const autoHeight = Math.round(Math.min(92, Math.max(76, available * 0.105)));
-  const featureBlockHeight = Math.max(222, available - topHeight - profileHeight - ctaBlockHeight - autoHeight);
+  const featureOffset = compact ? 6 : 8;
+  const featureBlockHeight = Math.max(214, available - topHeight - profileHeight - ctaBlockHeight - autoHeight - featureOffset);
   const featureCardHeight = Math.max(compact ? 64 : 68, Math.floor((featureBlockHeight - gap * 2) / 3));
 
   return {
@@ -201,6 +204,7 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
     autoHeight,
     featureBlockHeight,
     featureCardHeight,
+    featureOffset,
     tabBarHeight,
     tabBarOffset,
     iconButton: compact ? 42 : 48,
@@ -348,14 +352,14 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       case 'packages':
         navigation.navigate('Packages');
         return;
-      case 'badges':
-        navigation.navigate('Badges');
-        return;
       case 'settings':
         navigation.navigate('Settings');
         return;
       case 'logout':
-        navigation.replace('Login');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
         return;
       default:
         showComingSoon(item.label);
@@ -495,7 +499,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
             />
           </View>
 
-          <View style={{ height: metrics.featureBlockHeight }}>
+          <View style={{ height: metrics.featureBlockHeight, marginTop: metrics.featureOffset }}>
             <FeatureGrid cardHeight={metrics.featureCardHeight} compact={metrics.compact} items={featureItems} onSelect={handleFeaturePress} palette={palette} />
           </View>
         </Animated.View>
@@ -506,7 +510,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         style={[
           styles.bottomTabBar,
           {
-            bottom: Math.max(insets.bottom - 2, 4),
+            bottom: 4,
           },
         ]}>
         <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
@@ -596,11 +600,11 @@ const styles = StyleSheet.create({
   },
   bottomTabBar: {
     position: 'absolute',
-    left: 18,
-    right: 18,
-    height: 78,
+    left: 24,
+    right: 24,
+    height: 76,
     borderRadius: 28,
     justifyContent: 'flex-end',
-    zIndex: 50,
+    zIndex: 100,
   },
 });

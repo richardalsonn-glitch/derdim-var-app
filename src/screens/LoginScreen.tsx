@@ -14,6 +14,7 @@ import { AppScreenProps } from '../navigation/types';
 
 export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
   const { profile, updateProfile } = useAppState();
+  const canGoBack = navigation.canGoBack();
   const [email, setEmail] = useState(profile.email ?? 'gizli@derdimvar.app');
   const [password, setPassword] = useState('12345678');
   const [errorMessage, setErrorMessage] = useState('');
@@ -38,7 +39,7 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
 
   return (
     <PremiumScreen>
-      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Anonim ses odasına giriş yap" title="Giriş Yap" />
+      <ScreenHeader onBack={canGoBack ? () => navigation.goBack() : undefined} subtitle="Anonim ses odasına giriş yap" title="Giriş Yap" />
 
       <GlassCard style={styles.card}>
         <FormInput icon="mail-outline" label="E-posta" onChangeText={setEmail} placeholder="mail adresin" value={email} />
