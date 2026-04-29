@@ -33,9 +33,9 @@ type HomeMetrics = {
   short: boolean;
   sidePadding: number;
   topPadding: number;
-  bottomPadding: number;
-  contentBottomGap: number;
+  contentPaddingBottom: number;
   gap: number;
+  ctaGap: number;
   topHeight: number;
   profileHeight: number;
   ctaBlockHeight: number;
@@ -173,30 +173,29 @@ function getFeatureItems(): FeatureItem[] {
 function getMetrics(width: number, height: number, insetsTop: number, insetsBottom: number): HomeMetrics {
   const compact = width < 380;
   const short = height < 760;
-  const sidePadding = compact ? 12 : 16;
-  const topPadding = 8;
-  const bottomPadding = short ? 8 : 12;
-  const gap = short ? 8 : 10;
-  const contentBottomGap = short ? 10 : 12;
-  const tabBarHeight = compact ? 76 : 82;
-  const tabBarOffset = insetsBottom + 8;
-  const reservedBottom = tabBarHeight + tabBarOffset + contentBottomGap;
-  const available = height - insetsTop - topPadding - bottomPadding - reservedBottom - gap * 4;
-  const topHeight = Math.round(Math.min(58, Math.max(46, available * 0.075)));
-  const profileHeight = Math.round(Math.min(128, Math.max(108, available * 0.145)));
-  const ctaBlockHeight = Math.round(Math.min(228, Math.max(184, available * 0.235)));
-  const autoHeight = Math.round(Math.min(84, Math.max(70, available * 0.098)));
-  const featureBlockHeight = Math.max(198, available - topHeight - profileHeight - ctaBlockHeight - autoHeight);
-  const featureCardHeight = Math.max(compact ? 58 : 62, Math.floor((featureBlockHeight - gap * 2) / 3));
+  const sidePadding = compact ? 14 : 18;
+  const topPadding = compact ? 6 : 8;
+  const gap = short ? 10 : 12;
+  const ctaGap = compact ? 18 : 20;
+  const tabBarHeight = compact ? 74 : 78;
+  const tabBarOffset = insetsBottom > 0 ? Math.max(6, insetsBottom - 4) : 4;
+  const contentPaddingBottom = tabBarHeight + tabBarOffset + 10;
+  const available = height - insetsTop - topPadding - contentPaddingBottom - gap * 4;
+  const topHeight = Math.round(Math.min(60, Math.max(48, available * 0.076)));
+  const profileHeight = Math.round(Math.min(136, Math.max(114, available * 0.16)));
+  const ctaBlockHeight = Math.round(Math.min(236, Math.max(188, available * 0.24)) * 0.95);
+  const autoHeight = Math.round(Math.min(92, Math.max(76, available * 0.105)));
+  const featureBlockHeight = Math.max(222, available - topHeight - profileHeight - ctaBlockHeight - autoHeight);
+  const featureCardHeight = Math.max(compact ? 64 : 68, Math.floor((featureBlockHeight - gap * 2) / 3));
 
   return {
     compact,
     short,
     sidePadding,
     topPadding,
-    bottomPadding,
-    contentBottomGap,
+    contentPaddingBottom,
     gap,
+    ctaGap,
     topHeight,
     profileHeight,
     ctaBlockHeight,
@@ -403,7 +402,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     message: 'Bugün sana iyi gelecek birisini bulabilirsin.',
   } as const;
 
-  const ctaHeight = Math.floor((metrics.ctaBlockHeight - metrics.gap) / 2);
+  const ctaHeight = Math.floor((metrics.ctaBlockHeight - metrics.ctaGap) / 2);
 
   return (
     <LinearGradient colors={[...palette.background]} style={styles.screen}>
@@ -411,14 +410,14 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       <View pointerEvents="none" style={[styles.orb, styles.orbRight, { backgroundColor: palette.orbSecondary }]} />
       <View pointerEvents="none" style={[styles.orb, styles.orbBottom, { backgroundColor: palette.orbPrimary }]} />
 
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
         <Animated.View
           style={[
             styles.page,
             {
               paddingHorizontal: metrics.sidePadding,
               paddingTop: metrics.topPadding,
-              paddingBottom: metrics.bottomPadding,
+              paddingBottom: metrics.contentPaddingBottom,
               gap: metrics.gap,
               opacity: fadeValue,
               transform: [
@@ -459,7 +458,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
             <ProfileCard avatar={avatar} compact={metrics.compact} data={profileData} onPress={() => navigation.navigate('Profile')} palette={palette} />
           </View>
 
-          <View style={{ height: metrics.ctaBlockHeight, gap: metrics.gap }}>
+          <View style={{ height: metrics.ctaBlockHeight, gap: metrics.ctaGap }}>
             <ActionCard
               compact={metrics.compact}
               glowColor="rgba(255, 86, 180, 0.34)"
@@ -508,8 +507,9 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         style={[
           styles.bottomBarWrap,
           {
+            left: 16,
+            right: 16,
             bottom: metrics.tabBarOffset,
-            paddingHorizontal: metrics.sidePadding,
           },
         ]}
       >
@@ -553,6 +553,7 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+    position: 'relative',
   },
   safeArea: {
     flex: 1,
@@ -601,12 +602,8 @@ const styles = StyleSheet.create({
   },
   bottomBarWrap: {
     position: 'absolute',
-    left: 0,
-    right: 0,
   },
   bottomBarInner: {
     width: '100%',
-    maxWidth: layout.maxWidth,
-    alignSelf: 'center',
   },
 });
