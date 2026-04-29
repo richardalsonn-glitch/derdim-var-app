@@ -54,7 +54,6 @@ const drawerItems: DrawerItem[] = [
   { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
   { key: 'notifications', label: 'Bildirimler', icon: 'notifications' },
   { key: 'packages', label: 'Paketler', icon: 'diamond' },
-  { key: 'badges', label: 'Rozetler', icon: 'shield-half' },
   { key: 'settings', label: 'Ayarlar', icon: 'settings' },
   { key: 'logout', label: 'Çıkış Yap', icon: 'log-out' },
 ];
