@@ -89,7 +89,7 @@ function getMetrics(width: number, height: number): Metrics {
   const gap = short ? 6 : compact ? 8 : 10;
   const tinyGap = short ? 4 : 6;
   const usableWidth = Math.min(layout.maxWidth, width) - horizontalPadding * 2;
-  const ring = clamp(Math.min(usableWidth - 54, height * 0.295), short ? 198 : 208, compact ? 254 : 286);
+  const ring = clamp(Math.min(usableWidth - 122, height * 0.325), short ? 210 : 222, compact ? 236 : 248);
 
   return {
     horizontalPadding,
@@ -105,7 +105,7 @@ function getMetrics(width: number, height: number): Metrics {
     sideColumnWidth: compact ? 100 : 110,
     autoHeight: short ? 58 : 64,
     ring,
-    gift: short ? 56 : compact ? 60 : 64,
+    gift: short ? 52 : compact ? 56 : 60,
     topicHeight: short ? 72 : 80,
     likeHeight: short ? 62 : 70,
     bottomHeight: short ? 96 : 106,
@@ -595,13 +595,13 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
           </View>
 
           <View style={styles.ringSection}>
-            <View style={[styles.ringWrap, { minHeight: metrics.ring + metrics.gift * 0.46, marginBottom: metrics.short ? 8 : 10 }]}>
+            <View style={[styles.ringWrap, { minHeight: metrics.ring + metrics.gift * 0.5, marginBottom: metrics.short ? 12 : 14 }]}>
               <View
                 style={[
                   styles.ringCluster,
                   {
-                    width: metrics.ring + metrics.gift + (metrics.short ? 8 : 10),
-                    height: metrics.ring + metrics.gift * 0.2,
+                    width: '100%',
+                    height: metrics.ring + metrics.gift * 0.5,
                   },
                 ]}
               >
@@ -627,14 +627,15 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                     width: metrics.gift,
                     height: metrics.gift,
                     borderRadius: metrics.gift / 2,
-                    left: metrics.ring + (metrics.short ? 8 : 10),
-                    top: metrics.ring - metrics.gift * 0.82,
+                    left: '50%',
+                    marginLeft: metrics.ring * 0.39,
+                    top: metrics.ring * 0.84,
                   },
                   !isMatched && styles.giftButtonDisabled,
                 ]}
               >
                 <LinearGradient colors={['rgba(255, 84, 176, 0.98)', 'rgba(126, 74, 255, 0.96)']} style={styles.giftGradient}>
-                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 18 : 20} />
+                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 17 : 19} />
                   <Text adjustsFontSizeToFit minimumFontScale={0.86} numberOfLines={2} style={styles.giftButtonText}>
                     Hediye{'\n'}Gönder
                   </Text>
@@ -645,7 +646,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
           </View>
 
           <View style={styles.bottomSection}>
-            <View style={[styles.topicCard, { height: metrics.topicHeight, paddingHorizontal: metrics.compact ? 10 : 12, paddingVertical: metrics.short ? 8 : 10 }]}>
+            <View style={[styles.topicCard, styles.topicCardHidden, { height: metrics.topicHeight, paddingHorizontal: metrics.compact ? 10 : 12, paddingVertical: metrics.short ? 8 : 10 }]}>
               <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.topicTitle}>
                 Konu seç
               </Text>
@@ -1116,7 +1117,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   ringSection: {
-    flex: 3.4,
+    flex: 3.95,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1127,7 +1128,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   ringCluster: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'flex-start',
     position: 'relative',
   },
@@ -1160,7 +1161,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   bottomSection: {
-    flex: 2.9,
+    flex: 2.15,
     justifyContent: 'space-between',
   },
   topicCard: {
@@ -1170,6 +1171,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18, 16, 42, 0.82)',
     justifyContent: 'center',
     gap: 8,
+  },
+  topicCardHidden: {
+    display: 'none',
   },
   topicTitle: {
     color: colors.text,
