@@ -89,7 +89,7 @@ function getMetrics(width: number, height: number): Metrics {
   const gap = short ? 6 : compact ? 8 : 10;
   const tinyGap = short ? 4 : 6;
   const usableWidth = Math.min(layout.maxWidth, width) - horizontalPadding * 2;
-  const ring = clamp(Math.min(usableWidth - 50, height * 0.29), 204, compact ? 248 : 278);
+  const ring = clamp(Math.min(usableWidth - 54, height * 0.295), short ? 198 : 208, compact ? 254 : 286);
 
   return {
     horizontalPadding,
@@ -105,7 +105,7 @@ function getMetrics(width: number, height: number): Metrics {
     sideColumnWidth: compact ? 100 : 110,
     autoHeight: short ? 58 : 64,
     ring,
-    gift: short ? 64 : compact ? 68 : 72,
+    gift: short ? 56 : compact ? 60 : 64,
     topicHeight: short ? 72 : 80,
     likeHeight: short ? 62 : 70,
     bottomHeight: short ? 96 : 106,
@@ -595,7 +595,8 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
           </View>
 
           <View style={styles.ringSection}>
-            <View style={[styles.ringWrap, { minHeight: metrics.ring + 10 }]}>
+            <View style={[styles.ringWrap, { minHeight: metrics.ring + metrics.gift * 0.46, marginBottom: metrics.short ? 8 : 10 }]}>
+              <View style={[styles.ringCluster, { width: metrics.ring + metrics.gift * 0.86, height: metrics.ring + metrics.gift * 0.18 }]}>
               <CountdownRing
                 promoText={isMatched ? `Hediye +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
                 promoIcon="gift"
@@ -609,7 +610,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                 totalSeconds={isMatched ? Math.max(CALL_SECONDS, remainingSeconds) : SEARCH_SECONDS}
               />
 
-              <Pressable
+                <Pressable
                 disabled={!isMatched}
                 onPress={() => setGiftVisible(true)}
                 style={[
@@ -618,19 +619,20 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                     width: metrics.gift,
                     height: metrics.gift,
                     borderRadius: metrics.gift / 2,
-                    bottom: 8,
-                    right: clamp((Math.min(layout.maxWidth, width) - metrics.horizontalPadding * 2 - metrics.ring) / 2 - 16, 4, 20),
+                    right: 0,
+                    top: metrics.ring * 0.57,
                   },
                   !isMatched && styles.giftButtonDisabled,
                 ]}
               >
                 <LinearGradient colors={['rgba(255, 84, 176, 0.98)', 'rgba(126, 74, 255, 0.96)']} style={styles.giftGradient}>
-                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 20 : 22} />
-                  <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={2} style={styles.giftButtonText}>
+                  <Ionicons color={colors.text} name="gift" size={metrics.short ? 18 : 20} />
+                  <Text adjustsFontSizeToFit minimumFontScale={0.86} numberOfLines={2} style={styles.giftButtonText}>
                     Hediye{'\n'}Gönder
                   </Text>
                 </LinearGradient>
-              </Pressable>
+                </Pressable>
+              </View>
             </View>
           </View>
 
@@ -1112,6 +1114,11 @@ const styles = StyleSheet.create({
   },
   ringWrap: {
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  ringCluster: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',

@@ -204,14 +204,14 @@ export function CountdownRing({
   const markerSize = Math.max(20, size * 0.075);
   const markerLeft = center + Math.cos(markerRadians) * markerRadius - markerSize / 2;
   const markerTop = center + Math.sin(markerRadians) * markerRadius - markerSize / 2;
-  const titleSize = clamp(size * 0.05, 14, 21);
-  const timeSize = clamp(size * 0.18, 44, 60);
-  const subtitleSize = clamp(size * 0.05, 13, 19);
-  const promoIconSize = clamp(size * 0.05, 14, 18);
-  const promoTextSize = clamp(size * 0.032, 10, 12);
-  const promoPaddingHorizontal = clamp(size * 0.03, 10, 14);
-  const titleIconSize = clamp(size * 0.066, 18, 24);
-  const contentGap = clamp(size * 0.022, 8, 12);
+  const titleSize = clamp(size * 0.05, 14, 20);
+  const timeSize = clamp(size * 0.176, 42, 60);
+  const subtitleSize = clamp(size * 0.043, 12, 16);
+  const promoIconSize = clamp(size * 0.056, 16, 20);
+  const promoTextSize = clamp(size * 0.039, 11, 14);
+  const promoPaddingHorizontal = clamp(size * 0.06, 16, 24);
+  const titleIconSize = clamp(size * 0.07, 19, 26);
+  const contentGap = clamp(size * 0.016, 6, 9);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }]}>
@@ -256,34 +256,39 @@ export function CountdownRing({
         </View>
       </View>
 
-      <View style={[styles.innerRing, { width: size * 0.82, height: size * 0.82, borderRadius: (size * 0.82) / 2 }]}>
+      <View style={[styles.innerRing, { width: size * 0.83, height: size * 0.83, borderRadius: (size * 0.83) / 2 }]}>
         <View
           style={[
             styles.coreSurface,
             {
-              width: size * 0.72,
-              height: size * 0.72,
-              borderRadius: (size * 0.72) / 2,
+              width: size * 0.74,
+              height: size * 0.74,
+              borderRadius: (size * 0.74) / 2,
               gap: contentGap,
-              paddingHorizontal: clamp(size * 0.06, 20, 28),
+              paddingHorizontal: clamp(size * 0.078, 20, 30),
             },
           ]}
         >
           {titleIcon ? <Ionicons color={colors.pink} name={titleIcon} size={titleIconSize} /> : null}
-          <Text numberOfLines={2} style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.18 }]}>
+          <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={2} style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.18 }]}>
             {title ?? caption}
           </Text>
           <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[styles.time, { fontSize: timeSize }]}>
             {formatSeconds(remainingSeconds)}
           </Text>
-          <Text numberOfLines={2} style={[styles.subtitle, { fontSize: subtitleSize, lineHeight: subtitleSize * 1.18 }]}>
+          <Text adjustsFontSizeToFit minimumFontScale={0.88} numberOfLines={2} style={[styles.subtitle, { fontSize: subtitleSize, lineHeight: subtitleSize * 1.18 }]}>
             {subtitle ?? caption}
           </Text>
 
           {promoText ? (
-            <View style={[styles.promoPill, { paddingHorizontal: promoPaddingHorizontal }]}>
+            <View style={[styles.promoPill, { minWidth: size * 0.45, paddingHorizontal: promoPaddingHorizontal }]}>
               <Ionicons color={colors.pink} name={promoIcon} size={promoIconSize} />
-              <Text numberOfLines={1} style={[styles.promoText, { fontSize: promoTextSize, lineHeight: promoTextSize * 1.16 }]}>
+              <Text
+                adjustsFontSizeToFit
+                minimumFontScale={0.92}
+                numberOfLines={1}
+                style={[styles.promoText, { fontSize: promoTextSize, lineHeight: promoTextSize * 1.16 }]}
+              >
                 {promoText}
               </Text>
             </View>
@@ -348,6 +353,7 @@ const styles = StyleSheet.create({
     color: '#FF63C8',
     fontWeight: '700',
     textAlign: 'center',
+    width: '100%',
   },
   time: {
     color: colors.text,
@@ -359,26 +365,26 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
     textAlign: 'center',
+    width: '100%',
   },
   promoPill: {
-    minHeight: 30,
-    marginTop: 0,
-    paddingVertical: 5,
+    minHeight: 38,
+    marginTop: 2,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(186, 104, 255, 0.18)',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderColor: 'rgba(210, 134, 255, 0.26)',
+    backgroundColor: 'rgba(255,255,255,0.045)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    maxWidth: '78%',
-    transform: [{ translateY: -4 }],
+    gap: 8,
+    maxWidth: '94%',
   },
   promoText: {
     color: colors.text,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
-    flexShrink: 1,
+    flexShrink: 0,
   },
 });
