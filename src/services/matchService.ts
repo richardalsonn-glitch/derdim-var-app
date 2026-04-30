@@ -54,7 +54,7 @@ async function fetchPartnerProfile(userId: string | null): Promise<MatchParticip
   const { data, error } = await supabase
     .from('profiles')
     .select('username, avatar_id, plan')
-    .eq('id', userId)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (error || !data) {

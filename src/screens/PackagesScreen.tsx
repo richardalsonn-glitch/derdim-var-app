@@ -56,7 +56,7 @@ export function PackagesScreen({ navigation }: AppScreenProps<'Packages'>) {
               </View>
 
               <GradientButton
-                onPress={() => setPlan(plan.id)}
+                onPress={() => void setPlan(plan.id)}
                 title={active ? 'Aktif planın' : `${plan.name} planını seç`}
                 variant={vipCard ? 'gold' : plan.id === 'plus' ? 'secondary' : 'ghost'}
               />

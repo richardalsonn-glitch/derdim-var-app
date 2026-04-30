@@ -1,6 +1,7 @@
 import { PropsWithChildren, createContext, useContext, useMemo, useState } from 'react';
 
 import { defaultProfile, getAvatarById, topics } from './mockData';
+import { updateCurrentUserPlan } from '../services/authService';
 import { AppProfile, FriendRequestItem, FriendSummary, MatchRole, MembershipPlan, TopicTag, UiTheme } from '../types';
 
 function getLevelFromScore(score: number) {
@@ -53,7 +54,7 @@ type AppContextValue = {
   uiTheme: UiTheme;
   updateProfile: (patch: Partial<AppProfile>) => void;
   updateUsername: (username: string) => void;
-  setPlan: (plan: MembershipPlan) => void;
+  setPlan: (plan: MembershipPlan) => Promise<void>;
   setAvatar: (avatarId: string) => void;
   setAutoCallEnabled: (value: boolean) => void;
   setCountdownAlertsEnabled: (value: boolean) => void;
@@ -128,8 +129,20 @@ export function AppProvider({ children }: PropsWithChildren) {
           lastUsernameChangeDate: new Date().toISOString(),
         }));
       },
-      setPlan: (plan) => {
-        setProfile((current) => ({ ...current, plan }));
+      setPlan: async (plan) => {
+        const result = await updateCurrentUserPlan(plan);
+
+        if (result.error || !result.data) {
+          console.warn('[profile] setPlan failed:', result.error?.message ?? 'unknown error');
+          return;
+        }
+
+        setProfile((current) => ({
+          ...current,
+          plan: result.data?.plan ?? 'free',
+          username: result.data?.username || current.username,
+          avatarId: result.data?.avatarId || current.avatarId,
+        }));
       },
       setAvatar: (avatarId) => {
         setProfile((current) => ({ ...current, avatarId }));
