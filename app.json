@@ -6,6 +6,7 @@
     "newArchEnabled": true,
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "scheme": "derdimvar",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#060816"
@@ -15,6 +16,7 @@
     ],
     "ios": {
       "supportsTablet": false,
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Derdim Var sesli anonim görüşmeler için mikrofon erişimine ihtiyaç duyar."
       }
@@ -33,13 +35,17 @@
     "plugins": [
       "expo-asset",
       "expo-font",
+      "expo-apple-authentication",
+      "@livekit/react-native-expo-plugin",
+      "@config-plugins/react-native-webrtc",
       [
         "expo-audio",
         {
           "microphonePermission": "Derdim Var sesli anonim görüşmeler için mikrofon erişimine ihtiyaç duyar.",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

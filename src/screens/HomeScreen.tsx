@@ -18,8 +18,10 @@ import { colors, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { signOut } from '../services/authService';
+import { joinQueue, leaveQueue, listenForMatch } from '../services/matchService';
 import { requestMicrophonePermission } from '../services/permissionsService';
-import { MatchRole, UiTheme } from '../types';
+import { MatchRole, MatchmakingMode, UiTheme } from '../types';
 
 const AUTO_CALL_SECONDS = 45;
 
@@ -39,6 +41,7 @@ type HomeMetrics = {
   topHeight: number;
   profileHeight: number;
   ctaBlockHeight: number;
+  ctaCardHeight: number;
   autoHeight: number;
   featureBlockHeight: number;
   featureCardHeight: number;
@@ -55,6 +58,7 @@ const drawerItems: DrawerItem[] = [
   { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
   { key: 'notifications', label: 'Bildirimler', icon: 'notifications' },
   { key: 'packages', label: 'Paketler', icon: 'diamond' },
+  { key: 'badges', label: 'Rozet Sistemi', icon: 'shield-half' },
   { key: 'settings', label: 'Ayarlar', icon: 'settings' },
   { key: 'logout', label: 'Çıkış Yap', icon: 'log-out' },
 ];
@@ -69,6 +73,10 @@ const bottomTabs: BottomTabItem[] = [
 
 function formatAutoCall(seconds: number) {
   return `00:${String(seconds).padStart(2, '0')}`;
+}
+
+function getMatchmakingMode(role: MatchRole): MatchmakingMode {
+  return role === 'derdim-var' ? 'derdim' : 'derman';
 }
 
 function getPalette(theme: UiTheme): HomePalette {
@@ -175,20 +183,21 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
   const short = height < 760;
   const sidePadding = compact ? 14 : 18;
   const topPadding = compact ? 6 : 8;
-  const gap = short ? 10 : 12;
-  const ctaGapBase = compact ? 18 : 20;
-  const ctaGap = ctaGapBase + 6;
+  const gap = short ? 8 : 10;
+  const ctaGap = 10;
   const tabBarHeight = 76;
   const tabBarOffset = 4;
   const contentPaddingBottom = tabBarHeight + tabBarOffset + 12;
   const available = height - insetsTop - topPadding - contentPaddingBottom - gap * 4;
   const topHeight = Math.round(Math.min(60, Math.max(48, available * 0.076)));
-  const profileHeight = Math.round(Math.min(136, Math.max(114, available * 0.16)));
-  const ctaBlockHeight = Math.round(Math.min(236, Math.max(188, available * 0.24)) * 0.95) + (ctaGap - ctaGapBase);
-  const autoHeight = Math.round(Math.min(92, Math.max(76, available * 0.105)));
-  const featureOffset = compact ? 6 : 8;
-  const featureBlockHeight = Math.max(214, available - topHeight - profileHeight - ctaBlockHeight - autoHeight - featureOffset);
-  const featureCardHeight = Math.max(compact ? 64 : 68, Math.floor((featureBlockHeight - gap * 2) / 3));
+  const profileHeight = Math.round(Math.min(132, Math.max(110, available * 0.154)));
+  const ctaCardHeightBase = Math.round(Math.min(220, Math.max(176, available * 0.215)));
+  const ctaCardHeight = Math.max(88, Math.min(96, Math.round(ctaCardHeightBase * 0.82)));
+  const ctaBlockHeight = ctaCardHeight * 2 + ctaGap;
+  const autoHeight = Math.round(Math.min(84, Math.max(70, available * 0.094)));
+  const featureOffset = compact ? 4 : 6;
+  const featureBlockHeight = Math.max(192, available - topHeight - profileHeight - ctaBlockHeight - autoHeight - featureOffset);
+  const featureCardHeight = Math.max(compact ? 58 : 62, Math.floor((featureBlockHeight - gap * 2) / 3));
 
   return {
     compact,
@@ -201,6 +210,7 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
     topHeight,
     profileHeight,
     ctaBlockHeight,
+    ctaCardHeight,
     autoHeight,
     featureBlockHeight,
     featureCardHeight,
@@ -234,7 +244,12 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
   const [comingSoonTitle, setComingSoonTitle] = useState('Bu alan');
   const [activeTab, setActiveTab] = useState('home');
+  const [matchErrorVisible, setMatchErrorVisible] = useState(false);
+  const [matchErrorMessage, setMatchErrorMessage] = useState('Eslesme su anda baslatilamadi.');
   const fadeValue = useRef(new Animated.Value(0)).current;
+  const matchmakingRequestRef = useRef(0);
+  const matchmakingPhaseRef = useRef<'idle' | 'waiting' | 'matched'>('idle');
+  const matchListenerCleanupRef = useRef<null | (() => Promise<void>)>(null);
 
   useEffect(() => {
     Animated.timing(fadeValue, {
@@ -274,6 +289,83 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
   }
 
+  async function stopMatchmaking() {
+    matchmakingRequestRef.current += 1;
+    matchmakingPhaseRef.current = 'idle';
+
+    const cleanup = matchListenerCleanupRef.current;
+    matchListenerCleanupRef.current = null;
+
+    if (cleanup) {
+      await cleanup();
+    }
+
+    const result = await leaveQueue();
+
+    if (result.error) {
+      console.warn('[match] leaveQueue failed:', result.error.message);
+    }
+  }
+
+  function showMatchError(message: string) {
+    setMatchErrorMessage(message);
+    setMatchErrorVisible(true);
+  }
+
+  function openMatchedVoiceCall() {
+    matchmakingPhaseRef.current = 'matched';
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'VoiceCall', params: { matchReady: true } }],
+    });
+  }
+
+  async function startMatchmaking(role: MatchRole) {
+    const requestId = Date.now();
+    matchmakingRequestRef.current = requestId;
+    matchmakingPhaseRef.current = 'waiting';
+    setActiveRole(role);
+
+    const joinResult = await joinQueue(getMatchmakingMode(role));
+
+    if (matchmakingRequestRef.current !== requestId) {
+      return;
+    }
+
+    if (joinResult.error || !joinResult.data) {
+      matchmakingPhaseRef.current = 'idle';
+      showMatchError(joinResult.error?.message ?? 'Eslesme kuyrugu baslatilamadi.');
+      return;
+    }
+
+    if (joinResult.data.queue.status === 'matched') {
+      openMatchedVoiceCall();
+      return;
+    }
+
+    const listenResult = await listenForMatch(() => {
+      if (matchmakingRequestRef.current !== requestId) {
+        return;
+      }
+
+      matchListenerCleanupRef.current = null;
+      openMatchedVoiceCall();
+    });
+
+    if (matchmakingRequestRef.current !== requestId) {
+      return;
+    }
+
+    if (listenResult.error || !listenResult.data) {
+      matchmakingPhaseRef.current = 'idle';
+      await leaveQueue();
+      showMatchError(listenResult.error?.message ?? 'Gercek zamanli eslesme dinleyicisi baslatilamadi.');
+      return;
+    }
+
+    matchListenerCleanupRef.current = listenResult.data;
+  }
+
   async function openVoiceRole(role: MatchRole) {
     resetAutoCall();
     setPendingAction({ type: 'role', role });
@@ -284,8 +376,8 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       return;
     }
 
-    setActiveRole(role);
-    navigation.navigate('VoiceCall');
+    await stopMatchmaking();
+    await startMatchmaking(role);
   }
 
   async function openVoiceFeature(route: 'NightMode' | 'SilentScream') {
@@ -309,8 +401,25 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     setComingSoonVisible(true);
   }
 
+  async function handleLogout() {
+    await stopMatchmaking();
+    const result = await signOut();
+
+    if (result.error) {
+      console.error('[auth] signOut failed:', result.error.message);
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Splash' }],
+    });
+  }
+
   function handleFeaturePress(item: FeatureItem) {
     resetAutoCall();
+    if (matchmakingPhaseRef.current === 'waiting') {
+      void stopMatchmaking();
+    }
 
     switch (item.key) {
       case 'night':
@@ -339,6 +448,9 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   function handleDrawerSelect(item: DrawerItem) {
     setDrawerVisible(false);
     resetAutoCall();
+    if (matchmakingPhaseRef.current === 'waiting') {
+      void stopMatchmaking();
+    }
 
     switch (item.key) {
       case 'home':
@@ -352,14 +464,14 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       case 'packages':
         navigation.navigate('Packages');
         return;
+      case 'badges':
+        navigation.navigate('Badges');
+        return;
       case 'settings':
         navigation.navigate('Settings');
         return;
       case 'logout':
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
+        void handleLogout();
         return;
       default:
         showComingSoon(item.label);
@@ -369,6 +481,9 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   function handleBottomTabSelect(item: BottomTabItem) {
     setActiveTab(item.key);
     resetAutoCall();
+    if (matchmakingPhaseRef.current === 'waiting') {
+      void stopMatchmaking();
+    }
 
     switch (item.key) {
       case 'home':
@@ -396,6 +511,12 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     await openVoiceFeature(pendingAction.route);
   }
 
+  useEffect(() => () => {
+    if (matchmakingPhaseRef.current === 'waiting') {
+      void stopMatchmaking();
+    }
+  }, []);
+
   const profileData = {
     username: profile.username,
     plan: profile.plan,
@@ -404,8 +525,6 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     progress: Math.max(0.14, Math.min(0.96, (userScore % 100) / 100 || 0.65)),
     message: 'Bugün sana iyi gelecek birisini bulabilirsin.',
   } as const;
-
-  const ctaHeight = Math.floor((metrics.ctaBlockHeight - metrics.ctaGap) / 2);
 
   return (
     <LinearGradient colors={[...palette.background]} style={styles.screen}>
@@ -462,33 +581,37 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           </View>
 
           <View style={{ height: metrics.ctaBlockHeight, gap: metrics.ctaGap }}>
-            <ActionCard
-              compact={metrics.compact}
+            <View style={{ height: metrics.ctaCardHeight }}>
+              <ActionCard
+              compact
               glowColor="rgba(255, 86, 180, 0.34)"
               gradient={['#FF4A7A', '#FF3FA7', '#9426C8']}
-              height={ctaHeight}
+              height={metrics.ctaCardHeight}
               icon="heart"
               onPress={() => void openVoiceRole('derdim-var')}
               palette={palette}
               subtitle="İçimi dökmek istiyorum"
               title="DERDİM VAR"
-            />
-            <ActionCard
-              compact={metrics.compact}
+              />
+            </View>
+            <View style={{ height: metrics.ctaCardHeight }}>
+              <ActionCard
+              compact
               glowColor="rgba(79, 131, 255, 0.3)"
               gradient={['#8A3CFF', '#5D34FF', '#245CFF']}
-              height={ctaHeight}
+              height={metrics.ctaCardHeight}
               icon="headset"
               onPress={() => void openVoiceRole('derman-olan')}
               palette={palette}
               subtitle="Birini dinlemek istiyorum"
               title="DERMAN OL"
-            />
+              />
+            </View>
           </View>
 
-          <View style={{ height: metrics.autoHeight }}>
+          <View style={{ height: metrics.autoHeight, marginTop: 2 }}>
             <AutoCallCard
-              compact={metrics.compact}
+              compact
               counterLabel={profile.autoCallEnabled ? formatAutoCall(autoCallCountdown) : 'Kapalı'}
               enabled={profile.autoCallEnabled}
               onToggle={() => {
@@ -500,7 +623,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           </View>
 
           <View style={{ height: metrics.featureBlockHeight, marginTop: metrics.featureOffset }}>
-            <FeatureGrid cardHeight={metrics.featureCardHeight} compact={metrics.compact} items={featureItems} onSelect={handleFeaturePress} palette={palette} />
+            <FeatureGrid cardHeight={metrics.featureCardHeight} compact items={featureItems} onSelect={handleFeaturePress} palette={palette} />
           </View>
         </Animated.View>
       </SafeAreaView>
@@ -542,6 +665,13 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         message={`${comingSoonTitle} bölümü sonraki revizyonda tam ekran olarak bağlanacak.`}
         title="Yakında"
         visible={comingSoonVisible}
+      />
+
+      <NoticeModal
+        actions={[{ label: 'Tamam', onPress: () => setMatchErrorVisible(false), variant: 'secondary' }]}
+        message={matchErrorMessage}
+        title="Eslesme baslatilamadi"
+        visible={matchErrorVisible}
       />
     </LinearGradient>
   );

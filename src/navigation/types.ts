@@ -1,3 +1,4 @@
+import { MatchmakingMode } from '../types';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type RootStackParamList = {
@@ -7,7 +8,13 @@ export type RootStackParamList = {
   ProfileInfo: undefined;
   AvatarSelection: undefined;
   Home: undefined;
-  VoiceCall: undefined;
+  VoiceCall:
+    | {
+        matchReady?: boolean;
+        matchedUserId?: string;
+        queueMode?: MatchmakingMode;
+      }
+    | undefined;
   Matching: undefined;
   Chat: undefined;
   GiftPopup: undefined;

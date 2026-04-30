@@ -13,6 +13,10 @@ import { colors, gradients, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, topics } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { getCurrentUser } from '../services/authService';
+import { getActiveMatch, leaveQueue } from '../services/matchService';
+import { requestMicrophonePermission } from '../services/permissionsService';
+import { joinRoom, leaveRoom, toggleMute, toggleSpeaker } from '../services/voiceService';
 import { FriendRequestItem, FriendSummary, Gender, GiftItem, MembershipPlan, TopicTag } from '../types';
 
 type CallPhase = 'searching' | 'matched';
@@ -70,6 +74,7 @@ type Metrics = {
 const SEARCH_SECONDS = 2;
 const CALL_SECONDS = 60;
 const COUNTDOWN_AUDIO_SOURCE = require('../../assets/audio/gerisayim-1.m4a');
+const RINGING_AUDIO_SOURCE = require('../../assets/audio/ringing.m4a');
 
 const partners: MatchPartner[] = [
   { id: 'luna', username: 'Luna_24', avatarId: 'f-2', gender: 'Kadın', plan: 'vip', dermanScore: 4.8, level: 3 },
@@ -143,6 +148,25 @@ function getUntilNextReset() {
   return `${hours}s ${minutes}dk`;
 }
 
+function buildRealtimePartner() {
+  const activeMatch = getActiveMatch();
+  const partnerProfile = activeMatch?.partnerProfile;
+
+  if (!partnerProfile) {
+    return null;
+  }
+
+  return {
+    id: partnerProfile.userId,
+    username: partnerProfile.username,
+    avatarId: partnerProfile.avatarId,
+    gender: getAvatarById(partnerProfile.avatarId).gender,
+    plan: partnerProfile.plan,
+    dermanScore: 4.8,
+    level: 2,
+  } satisfies MatchPartner;
+}
+
 function TopicChip({ label, selected, compact, onPress }: TopicChipProps) {
   return (
     <Pressable onPress={onPress} style={[styles.topicChip, compact && styles.topicChipCompact, selected && styles.topicChipSelected]}>
@@ -172,7 +196,7 @@ function ControlButton({ icon, label, active, size, onPress }: ControlButtonProp
   );
 }
 
-export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
+export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall'>) {
   const {
     activeTopic,
     setActiveTopic,
@@ -196,9 +220,11 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   } = useAppState();
   const { width, height } = useWindowDimensions();
   const metrics = useMemo(() => getMetrics(width, height), [width, height]);
-  const [phase, setPhase] = useState<CallPhase>('searching');
+  const realtimePartner = useMemo(() => buildRealtimePartner(), []);
+  const isRealtimeSession = Boolean(route.params?.matchReady && realtimePartner);
+  const [phase, setPhase] = useState<CallPhase>(isRealtimeSession ? 'matched' : 'searching');
   const [matchSeed, setMatchSeed] = useState(0);
-  const [searchRemaining, setSearchRemaining] = useState(SEARCH_SECONDS);
+  const [searchRemaining, setSearchRemaining] = useState(isRealtimeSession ? 0 : SEARCH_SECONDS);
   const [autoContinue, setAutoContinue] = useState(true);
   const [giftVisible, setGiftVisible] = useState(false);
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
@@ -213,8 +239,12 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   const [micEnabled, setMicEnabled] = useState(true);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
   const [peerMuted, setPeerMuted] = useState(false);
-  const [partner, setPartner] = useState<MatchPartner>(partners[0]);
-  const [partnerScore, setPartnerScore] = useState(partners[0].dermanScore);
+  const [microphonePermissionGranted, setMicrophonePermissionGranted] = useState(false);
+  const [permissionNoticeVisible, setPermissionNoticeVisible] = useState(false);
+  const [voiceErrorVisible, setVoiceErrorVisible] = useState(false);
+  const [voiceErrorMessage, setVoiceErrorMessage] = useState('Sesli gorusme baglantisi kurulurken bir hata olustu.');
+  const [partner, setPartner] = useState<MatchPartner>(realtimePartner ?? partners[0]);
+  const [partnerScore, setPartnerScore] = useState((realtimePartner ?? partners[0]).dermanScore);
   const [partnerLiked, setPartnerLiked] = useState(false);
   const [likedThisMatch, setLikedThisMatch] = useState(false);
   const [incomingFriendRequestId, setIncomingFriendRequestId] = useState<string | null>(null);
@@ -226,6 +256,9 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   const lastCountdownAlertRef = useRef<number | null>(null);
   const countdownAudioStartedRef = useRef(false);
   const countdownAudioRef = useRef<AudioPlayer | null>(null);
+  const ringingAudioRef = useRef<AudioPlayer | null>(null);
+  const ringingFallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceJoinedRef = useRef(false);
   const remainingLikes = Math.max(0, dailyAppreciationLimit - dailyAppreciationUsed);
   const blockedIdsKey = blockedUserIds.join('|');
 
@@ -245,16 +278,121 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     [friendRequests, incomingFriendRequestId],
   );
 
+  async function disconnectVoiceRoom() {
+    voiceJoinedRef.current = false;
+    const result = await leaveRoom();
+
+    if (result.error) {
+      console.warn('[voice] leaveRoom failed:', result.error.message);
+    }
+  }
+
+  async function leaveRealtimeMatchAndGoHome() {
+    await disconnectVoiceRoom();
+    const result = await leaveQueue();
+
+    if (result.error) {
+      console.warn('[match] leaveQueue failed:', result.error.message);
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
+  }
+
+  function showVoiceError(message: string) {
+    setVoiceErrorMessage(message);
+    setVoiceErrorVisible(true);
+  }
+
+  async function handleToggleMute() {
+    const result = await toggleMute();
+
+    if (result.error || !result.data) {
+      showVoiceError(result.error?.message ?? 'Mikrofon durumu guncellenemedi.');
+      return;
+    }
+
+    setMicEnabled(!result.data.muted);
+  }
+
+  async function handleToggleSpeaker() {
+    const result = await toggleSpeaker();
+
+    if (result.error || !result.data) {
+      showVoiceError(result.error?.message ?? 'Hoparlor durumu guncellenemedi.');
+      return;
+    }
+
+    setSpeakerEnabled(result.data.speakerEnabled);
+  }
+
+  function stopRingingFallback() {
+    if (ringingFallbackIntervalRef.current) {
+      clearInterval(ringingFallbackIntervalRef.current);
+      ringingFallbackIntervalRef.current = null;
+    }
+  }
+
+  function startRingingFallback() {
+    if (ringingFallbackIntervalRef.current) {
+      return;
+    }
+
+    ringingFallbackIntervalRef.current = setInterval(() => {
+      Vibration.vibrate(35);
+    }, 2200);
+  }
+
+  function stopRingingSound(resetPlayback = true) {
+    stopRingingFallback();
+    ringingAudioRef.current?.pause();
+
+    if (resetPlayback) {
+      ringingAudioRef.current?.seekTo(0).catch(() => undefined);
+    }
+  }
+
+  function startRingingSound() {
+    const player = ringingAudioRef.current;
+
+    if (!player) {
+      startRingingFallback();
+      return;
+    }
+
+    player.volume = 0.35;
+    player.loop = true;
+    player.seekTo(0).then(() => {
+      player.play();
+    }).catch(() => {
+      try {
+        player.play();
+      } catch {
+        startRingingFallback();
+      }
+    });
+  }
+
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
-    const player = createAudioPlayer(COUNTDOWN_AUDIO_SOURCE);
-    player.volume = 0.5;
-    countdownAudioRef.current = player;
+    const countdownPlayer = createAudioPlayer(COUNTDOWN_AUDIO_SOURCE);
+    countdownPlayer.volume = 0.5;
+    countdownAudioRef.current = countdownPlayer;
+    const ringingPlayer = createAudioPlayer(RINGING_AUDIO_SOURCE);
+    ringingPlayer.volume = 0.35;
+    ringingPlayer.loop = true;
+    ringingAudioRef.current = ringingPlayer;
 
     return () => {
-      player.pause();
-      player.remove();
+      stopRingingSound();
+      countdownPlayer.pause();
+      countdownPlayer.remove();
+      ringingPlayer.pause();
+      ringingPlayer.remove();
       countdownAudioRef.current = null;
+      ringingAudioRef.current = null;
     };
   }, []);
 
@@ -265,6 +403,138 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
 
     return () => clearInterval(timerId);
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const prepareVoice = async () => {
+      const permission = await requestMicrophonePermission();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (!permission.granted) {
+        setMicrophonePermissionGranted(false);
+        setPermissionNoticeVisible(true);
+        return;
+      }
+
+      setMicrophonePermissionGranted(true);
+      await setAudioModeAsync({
+        allowsRecording: true,
+        interruptionMode: 'duckOthers',
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
+      }).catch((error) => {
+        if (mounted) {
+          showVoiceError(error instanceof Error ? error.message : 'Ses oturumu hazirlanamadi.');
+        }
+      });
+    };
+
+    void prepareVoice();
+
+    return () => {
+      mounted = false;
+      void disconnectVoiceRoom();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isRealtimeSession || !realtimePartner) {
+      return;
+    }
+
+    setPartner(realtimePartner);
+    setPartnerScore(realtimePartner.dermanScore);
+    setPartnerLiked(false);
+    setLikedThisMatch(false);
+    setIncomingFriendRequestId(null);
+    setIncomingFriendPrompted(false);
+    setGiftVisible(false);
+    setGiftOverlayVisible(false);
+    setSelectedGift(null);
+    setMicEnabled(true);
+    setSpeakerEnabled(true);
+    setPeerMuted(false);
+    reset(CALL_SECONDS, true);
+    setIsRunning(true);
+  }, [isRealtimeSession, realtimePartner, reset, setIsRunning]);
+
+  useEffect(() => {
+    if (!microphonePermissionGranted || !isMatched || voiceJoinedRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const connectVoice = async () => {
+      const currentUserResult = await getCurrentUser();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (currentUserResult.error || !currentUserResult.data?.id) {
+        showVoiceError(currentUserResult.error?.message ?? 'Sesli gorusme icin kullanici bulunamadi.');
+        return;
+      }
+
+      const joinResult = await joinRoom('test-room', currentUserResult.data.id);
+
+      if (cancelled) {
+        if (joinResult.data) {
+          await disconnectVoiceRoom();
+        }
+
+        return;
+      }
+
+      if (joinResult.error || !joinResult.data) {
+        showVoiceError(joinResult.error?.message ?? 'Sesli gorusme odasina baglanilamadi.');
+        return;
+      }
+
+      voiceJoinedRef.current = true;
+      setMicEnabled(!joinResult.data.muted);
+      setSpeakerEnabled(joinResult.data.speakerEnabled);
+    };
+
+    void connectVoice();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMatched, microphonePermissionGranted]);
+
+  useEffect(() => {
+    if (isMatched) {
+      return;
+    }
+
+    void disconnectVoiceRoom();
+  }, [isMatched]);
+
+  useEffect(() => {
+    if (phase !== 'searching') {
+      stopRingingSound();
+      return;
+    }
+
+    startRingingSound();
+    const fallbackTimerId = setTimeout(() => {
+      if (!ringingAudioRef.current?.isLoaded) {
+        startRingingFallback();
+      }
+    }, 900);
+
+    return () => {
+      clearTimeout(fallbackTimerId);
+      stopRingingSound();
+    };
+  }, [phase]);
 
   useEffect(() => {
     if (!isMatched || remainingSeconds > 10 || remainingSeconds <= 0) {
@@ -319,6 +589,11 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   }
 
   function startSearch(nextSeed: number) {
+    if (isRealtimeSession) {
+      return;
+    }
+
+    stopRingingSound();
     const nextPartner = selectPartner(nextSeed);
     setPartner(nextPartner);
     setPartnerScore(nextPartner.dermanScore);
@@ -339,10 +614,18 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   }
 
   useEffect(() => {
+    if (isRealtimeSession) {
+      return;
+    }
+
     startSearch(matchSeed);
-  }, [blockedIdsKey, matchSeed, skipCount]);
+  }, [blockedIdsKey, isRealtimeSession, matchSeed, skipCount]);
 
   useEffect(() => {
+    if (isRealtimeSession) {
+      return;
+    }
+
     if (phase !== 'searching') {
       return;
     }
@@ -361,7 +644,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     }, 1000);
 
     return () => clearInterval(timerId);
-  }, [phase, reset]);
+  }, [isRealtimeSession, phase, reset]);
 
   useEffect(() => {
     if (!isMatched || incomingFriendPrompted) {
@@ -377,13 +660,31 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
     return () => clearTimeout(timerId);
   }, [incomingFriendPrompted, isMatched, partner, receiveFriendRequest]);
 
+  useEffect(() => () => {
+    if (isRealtimeSession) {
+      void leaveQueue();
+    }
+  }, [isRealtimeSession]);
+
   function beginNextMatch() {
+    if (isRealtimeSession) {
+      void leaveRealtimeMatchAndGoHome();
+      return;
+    }
+
     setReviewVisible(false);
     setMatchSeed((current) => current + 1);
   }
 
   function finishConversation() {
+    stopRingingSound();
     setIsRunning(false);
+    void disconnectVoiceRoom();
+
+    if (isRealtimeSession) {
+      setReviewVisible(true);
+      return;
+    }
 
     if (autoContinue) {
       beginNextMatch();
@@ -429,14 +730,30 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   }
 
   function handlePass() {
+    stopRingingSound();
+    void disconnectVoiceRoom();
+
+    if (isRealtimeSession) {
+      void leaveRealtimeMatchAndGoHome();
+      return;
+    }
+
     registerSkip();
     beginNextMatch();
   }
 
   function handleBlockConfirmed() {
+    stopRingingSound();
+    void disconnectVoiceRoom();
     blockUser(getPartnerSummary(partner));
     setBlockConfirmVisible(false);
     setReviewVisible(false);
+
+    if (isRealtimeSession) {
+      void leaveRealtimeMatchAndGoHome();
+      return;
+    }
+
     setIsRunning(false);
     beginNextMatch();
   }
@@ -482,7 +799,15 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
               <Pressable
-                onPress={() => navigation.goBack()}
+                onPress={() => {
+                  stopRingingSound();
+                  if (isRealtimeSession) {
+                    void leaveRealtimeMatchAndGoHome();
+                    return;
+                  }
+
+                  navigation.goBack();
+                }}
                 style={[styles.backButton, { width: metrics.headerButton, height: metrics.headerButton, borderRadius: metrics.headerButton / 2 }]}
               >
                 <Ionicons color={colors.text} name="chevron-back" size={metrics.headerButton * 0.55} />
@@ -692,14 +1017,14 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                   active={micEnabled}
                   icon={micEnabled ? 'mic' : 'mic-off'}
                   label="Mikrofon"
-                  onPress={() => setMicEnabled((current) => !current)}
+                  onPress={() => void handleToggleMute()}
                   size={metrics.controlSize}
                 />
                 <ControlButton
                   active={speakerEnabled}
                   icon={speakerEnabled ? 'volume-high' : 'volume-mute'}
                   label="Hoparlör"
-                  onPress={() => setSpeakerEnabled((current) => !current)}
+                  onPress={() => void handleToggleSpeaker()}
                   size={metrics.controlSize}
                 />
                 <Pressable onPress={finishConversation} style={styles.endCallButton}>
@@ -741,6 +1066,20 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
       />
 
       <NoticeModal
+        actions={[{ label: 'Tamam', onPress: () => setPermissionNoticeVisible(false), variant: 'secondary' }]}
+        message="Mikrofon izni olmadan konuÅŸma yapÄ±lamaz"
+        title="Mikrofon izni gerekli"
+        visible={permissionNoticeVisible}
+      />
+
+      <NoticeModal
+        actions={[{ label: 'Tamam', onPress: () => setVoiceErrorVisible(false), variant: 'secondary' }]}
+        message={voiceErrorMessage}
+        title="Sesli gorusme hatasi"
+        visible={voiceErrorVisible}
+      />
+
+      <NoticeModal
         actions={[
           { label: 'Evet, engelle', onPress: handleBlockConfirmed, variant: 'gold' },
           { label: 'Hayır', onPress: () => setBlockConfirmVisible(false), variant: 'ghost' },
@@ -757,6 +1096,11 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
             onPress: () => {
               rewardMatch();
               setReviewVisible(false);
+              if (isRealtimeSession) {
+                void leaveRealtimeMatchAndGoHome();
+                return;
+              }
+
               navigation.navigate('Home');
             },
             variant: 'secondary',
@@ -766,6 +1110,11 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
             onPress: () => {
               penalizeMatch();
               setReviewVisible(false);
+              if (isRealtimeSession) {
+                void leaveRealtimeMatchAndGoHome();
+                return;
+              }
+
               navigation.navigate('Home');
             },
             variant: 'ghost',

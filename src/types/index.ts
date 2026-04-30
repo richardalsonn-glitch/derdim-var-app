@@ -4,6 +4,10 @@ export type MembershipPlan = 'free' | 'plus' | 'vip';
 
 export type MatchRole = 'derdim-var' | 'derman-olan';
 
+export type MatchmakingMode = 'derdim' | 'derman';
+
+export type MatchmakingStatus = 'waiting' | 'matched';
+
 export type TopicTag = 'İlişki' | 'İş' | 'Para' | 'Sağlık' | 'Genel';
 
 export type AvatarOption = {
@@ -79,6 +83,7 @@ export type AppProfile = {
   username: string;
   gender: Gender;
   age: number;
+  birthDate?: string;
   relationshipStatus: string;
   joinDate: string;
   plan: MembershipPlan;
@@ -106,4 +111,25 @@ export type FriendRequestItem = FriendSummary & {
   direction: FriendRequestDirection;
   status: FriendRequestStatus;
   createdAt: string;
+};
+
+export type MatchmakingQueueRow = {
+  id: string;
+  user_id: string;
+  mode: MatchmakingMode;
+  status: MatchmakingStatus;
+  matched_with: string | null;
+  created_at: string;
+};
+
+export type MatchParticipantProfile = {
+  userId: string;
+  username: string;
+  avatarId: string;
+  plan: MembershipPlan;
+};
+
+export type MatchmakingState = {
+  queue: MatchmakingQueueRow;
+  partnerProfile: MatchParticipantProfile | null;
 };
