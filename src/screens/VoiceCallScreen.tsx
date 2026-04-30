@@ -89,7 +89,7 @@ function getMetrics(width: number, height: number): Metrics {
   const gap = short ? 6 : compact ? 8 : 10;
   const tinyGap = short ? 4 : 6;
   const usableWidth = Math.min(layout.maxWidth, width) - horizontalPadding * 2;
-  const ring = clamp(Math.min(usableWidth - 122, height * 0.325), short ? 210 : 222, compact ? 236 : 248);
+  const ring = clamp(Math.min(usableWidth - 122, height * 0.325) * 1.07, short ? 224 : 236, compact ? 252 : 266);
 
   return {
     horizontalPadding,
