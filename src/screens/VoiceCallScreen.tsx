@@ -222,7 +222,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
   const isMatched = phase === 'matched';
   const partnerAvatar = useMemo(() => getAvatarById(partner.avatarId), [partner.avatarId]);
   const partnerBadge = getBadge(partner.plan);
-  const giftBonusSeconds = profile.plan === 'vip' ? 600 : 300;
+  const giftBonusSeconds = 600;
   const lastCountdownAlertRef = useRef<number | null>(null);
   const countdownAudioStartedRef = useRef(false);
   const countdownAudioRef = useRef<AudioPlayer | null>(null);
@@ -598,7 +598,7 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
             <View style={[styles.ringWrap, { minHeight: metrics.ring + metrics.gift * 0.46, marginBottom: metrics.short ? 8 : 10 }]}>
               <View style={[styles.ringCluster, { width: metrics.ring + metrics.gift * 0.86, height: metrics.ring + metrics.gift * 0.18 }]}>
               <CountdownRing
-                promoText={isMatched ? `Hediye +${profile.plan === 'vip' ? '10' : '5'} dk` : undefined}
+                promoText={isMatched ? 'Hediye +10 dk' : undefined}
                 promoIcon="gift"
                 remainingSeconds={isMatched ? remainingSeconds : searchRemaining}
                 segmentCount={76}
