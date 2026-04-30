@@ -596,7 +596,15 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
 
           <View style={styles.ringSection}>
             <View style={[styles.ringWrap, { minHeight: metrics.ring + metrics.gift * 0.46, marginBottom: metrics.short ? 8 : 10 }]}>
-              <View style={[styles.ringCluster, { width: metrics.ring + metrics.gift * 0.86, height: metrics.ring + metrics.gift * 0.18 }]}>
+              <View
+                style={[
+                  styles.ringCluster,
+                  {
+                    width: metrics.ring + metrics.gift + (metrics.short ? 8 : 10),
+                    height: metrics.ring + metrics.gift * 0.2,
+                  },
+                ]}
+              >
               <CountdownRing
                 promoText={isMatched ? 'Hediye +10 dk' : undefined}
                 promoIcon="gift"
@@ -619,8 +627,8 @@ export function VoiceCallScreen({ navigation }: AppScreenProps<'VoiceCall'>) {
                     width: metrics.gift,
                     height: metrics.gift,
                     borderRadius: metrics.gift / 2,
-                    right: 0,
-                    top: metrics.ring * 0.57,
+                    left: metrics.ring + (metrics.short ? 8 : 10),
+                    top: metrics.ring - metrics.gift * 0.82,
                   },
                   !isMatched && styles.giftButtonDisabled,
                 ]}
@@ -1119,8 +1127,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   ringCluster: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
     position: 'relative',
   },
   giftButton: {
