@@ -32,7 +32,6 @@
       },
       "package": "com.derdimvar.app",
       "versionCode": 1,
-      "versionName": "1.0.0",
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",

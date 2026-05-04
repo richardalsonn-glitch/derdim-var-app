@@ -92,6 +92,7 @@ export type AppProfile = {
   email?: string;
   lastUsernameChangeDate: string;
   autoCallEnabled: boolean;
+  isFrozen: boolean;
 };
 
 export type FriendRequestDirection = 'incoming' | 'outgoing';

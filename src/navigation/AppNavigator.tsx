@@ -5,7 +5,11 @@ import { colors } from '../constants/theme';
 import { AvatarSelectionScreen } from '../screens/AvatarSelectionScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { ChatScreen } from '../screens/ChatScreen';
+import { FriendProfileScreen } from '../screens/FriendProfileScreen';
+import { FriendsScreen } from '../screens/FriendsScreen';
+import { FrozenAccountScreen } from '../screens/FrozenAccountScreen';
 import { GiftPopupScreen } from '../screens/GiftPopupScreen';
+import { GiftsScreen } from '../screens/GiftsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LettersScreen } from '../screens/LettersScreen';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -56,6 +60,10 @@ export function AppNavigator() {
         <Stack.Screen component={VoiceCallScreen} name="VoiceCall" />
         <Stack.Screen component={MatchingScreen} name="Matching" />
         <Stack.Screen component={ChatScreen} name="Chat" />
+        <Stack.Screen component={GiftsScreen} name="Gifts" />
+        <Stack.Screen component={FriendsScreen} name="Friends" />
+        <Stack.Screen component={FriendProfileScreen} name="FriendProfile" />
+        <Stack.Screen component={FrozenAccountScreen} name="FrozenAccount" />
         <Stack.Screen component={PackagesScreen} name="Packages" />
         <Stack.Screen component={ProfileScreen} name="Profile" />
         <Stack.Screen component={NightModeScreen} name="NightMode" />

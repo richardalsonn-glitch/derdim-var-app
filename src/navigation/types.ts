@@ -16,7 +16,18 @@ export type RootStackParamList = {
       }
     | undefined;
   Matching: undefined;
-  Chat: undefined;
+  Chat:
+    | {
+        threadId?: string;
+        peerUserId?: string;
+      }
+    | undefined;
+  Gifts: undefined;
+  Friends: undefined;
+  FriendProfile: {
+    friendId: string;
+  };
+  FrozenAccount: undefined;
   GiftPopup: undefined;
   Packages: undefined;
   Profile: undefined;

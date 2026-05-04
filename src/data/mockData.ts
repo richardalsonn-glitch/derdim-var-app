@@ -253,6 +253,7 @@ export const defaultProfile = {
   email: 'gizli@derdimvar.app',
   lastUsernameChangeDate: '2026-04-01T12:00:00.000Z',
   autoCallEnabled: true,
+  isFrozen: false,
 };
 
 export const guestProfile = {

@@ -370,6 +370,11 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   }
 
   async function openVoiceRole(role: MatchRole) {
+    if (profile.isFrozen) {
+      navigation.reset({ index: 0, routes: [{ name: 'FrozenAccount' }] });
+      return;
+    }
+
     if (isJoiningQueueRef.current) {
       return;
     }
@@ -476,7 +481,13 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         navigation.navigate('Profile');
         return;
       case 'friends':
-        navigation.navigate('Profile');
+        navigation.navigate('Friends');
+        return;
+      case 'chats':
+        navigation.navigate('Chat');
+        return;
+      case 'notifications':
+        navigation.navigate('Settings');
         return;
       case 'packages':
         navigation.navigate('Packages');
@@ -506,7 +517,16 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       case 'home':
         return;
       case 'friends':
-        navigation.navigate('Profile');
+        navigation.navigate('Friends');
+        return;
+      case 'chats':
+        navigation.navigate('Chat');
+        return;
+      case 'gifts':
+        navigation.navigate('Gifts');
+        return;
+      case 'notifications':
+        navigation.navigate('Settings');
         return;
       default:
         showComingSoon(item.label);
@@ -691,8 +711,8 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
 
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setComingSoonVisible(false), variant: 'secondary' }]}
-        message={`${comingSoonTitle} bölümü sonraki revizyonda tam ekran olarak bağlanacak.`}
-        title="Yakında"
+        message={`${comingSoonTitle} alanı güvenli kullanım için hazırlandı. Ana akışlar aktif; destek ve moderasyon kayıtları güvenli şekilde alınır.`}
+        title="Bilgi"
         visible={comingSoonVisible}
       />
 

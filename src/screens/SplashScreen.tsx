@@ -106,11 +106,12 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
           username: result.data.profile?.username ?? profile.username,
           plan: result.data.profile?.plan ?? profile.plan,
           avatarId: result.data.profile?.avatarId ?? profile.avatarId,
+          isFrozen: result.data.profile?.isFrozen ?? profile.isFrozen,
         });
 
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Home' }],
+          routes: [{ name: result.data.profile?.isFrozen ? 'FrozenAccount' : 'Home' }],
         });
         return;
       }
@@ -220,11 +221,12 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
         username: result.data.profile?.username ?? profile.username,
         plan: result.data.profile?.plan ?? profile.plan,
         avatarId: result.data.profile?.avatarId ?? profile.avatarId,
+        isFrozen: result.data.profile?.isFrozen ?? profile.isFrozen,
       });
 
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Home' }],
+        routes: [{ name: result.data.profile?.isFrozen ? 'FrozenAccount' : 'Home' }],
       });
     } catch (error) {
       console.error(`[auth] ${provider} sign-in crashed:`, getSafeErrorMessage(error));

@@ -26,6 +26,7 @@ type ProfileSeed = {
   plan: MembershipPlan;
   avatarId: string;
   email?: string;
+  isFrozen?: boolean;
 };
 
 type AuthPayload = {
@@ -119,6 +120,7 @@ async function upsertProfileRecord(
     plan: seed?.plan ?? 'free',
     avatarId: normalizeText(seed?.avatarId) || defaultProfile.avatarId,
     email: user.email ?? undefined,
+    isFrozen: false,
   };
 
   if (!isSupabaseConfigured) {
@@ -128,7 +130,7 @@ async function upsertProfileRecord(
   try {
     const { data: existingProfile, error: fetchError } = await supabase
       .from('profiles')
-      .select('user_id, username, plan, avatar_id')
+      .select('user_id, username, plan, avatar_id, status, is_frozen')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -142,6 +144,7 @@ async function upsertProfileRecord(
         plan: normalizePlan(existingProfile.plan),
         avatarId: normalizeText(existingProfile.avatar_id) || fallbackProfile.avatarId,
         email: fallbackProfile.email,
+        isFrozen: Boolean(existingProfile.is_frozen) || existingProfile.status === 'frozen',
       };
     }
 
@@ -154,6 +157,8 @@ async function upsertProfileRecord(
           plan: fallbackProfile.plan,
           avatar_id: fallbackProfile.avatarId,
           email: fallbackProfile.email ?? null,
+          status: 'active',
+          is_frozen: false,
           created_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' },
@@ -170,6 +175,7 @@ async function upsertProfileRecord(
       plan: normalizePlan(data?.plan),
       avatarId: normalizeText(data?.avatar_id) || fallbackProfile.avatarId,
       email: fallbackProfile.email,
+      isFrozen: false,
     };
   } catch (error) {
     console.warn('[auth] profiles upsert skipped:', getSafeErrorMessage(error, 'unknown error'));
@@ -388,6 +394,8 @@ export async function updateCurrentUserPlan(plan: MembershipPlan): Promise<AuthS
           plan,
           avatar_id: baseProfile.avatarId,
           email: userResult.data.email ?? null,
+          status: 'active',
+          is_frozen: false,
           created_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' },

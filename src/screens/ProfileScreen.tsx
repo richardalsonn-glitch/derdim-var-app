@@ -13,6 +13,7 @@ import { colors, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { badges, getAvatarById, receivedGifts } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { deleteCurrentAccount, freezeCurrentAccount } from '../services/accountService';
 import { FriendRequestItem, MembershipPlan } from '../types';
 
 const USERNAME_CHANGE_WINDOW_DAYS = 7;
@@ -89,6 +90,7 @@ function FriendRequestRow({
 export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
   const {
     profile,
+    updateProfile,
     updateUsername,
     userLevel,
     userScore,
@@ -98,6 +100,8 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
   } = useAppState();
   const [usernameDraft, setUsernameDraft] = useState(profile.username);
   const [reportVisible, setReportVisible] = useState(false);
+  const [accountAction, setAccountAction] = useState<'freeze' | 'delete' | null>(null);
+  const [accountError, setAccountError] = useState('');
   const [usernameNoticeVisible, setUsernameNoticeVisible] = useState(false);
   const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
   const remainingDays = useMemo(() => getRemainingDays(profile.lastUsernameChangeDate), [profile.lastUsernameChangeDate]);
@@ -114,6 +118,23 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
     }
 
     updateUsername(usernameDraft.trim() || profile.username);
+  };
+
+  const handleAccountAction = async (action: 'freeze' | 'delete') => {
+    const result = action === 'freeze' ? await freezeCurrentAccount() : await deleteCurrentAccount();
+
+    if (result.error) {
+      setAccountError(result.error.message);
+      return;
+    }
+
+    if (action === 'freeze') {
+      updateProfile({ isFrozen: true });
+      navigation.reset({ index: 0, routes: [{ name: 'FrozenAccount' }] });
+      return;
+    }
+
+    navigation.reset({ index: 0, routes: [{ name: 'Splash' }] });
   };
 
   return (
@@ -262,6 +283,19 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
         </Pressable>
       </View>
 
+      {accountError ? <Text style={styles.accountError}>{accountError}</Text> : null}
+
+      <View style={styles.actionRow}>
+        <Pressable onPress={() => setAccountAction('freeze')} style={styles.inlineAction}>
+          <Ionicons color={colors.gold} name="pause-circle" size={16} />
+          <Text style={styles.inlineActionText}>Hesabımı Dondur</Text>
+        </Pressable>
+        <Pressable onPress={() => setAccountAction('delete')} style={[styles.inlineAction, styles.dangerAction]}>
+          <Ionicons color={colors.danger} name="trash" size={16} />
+          <Text style={styles.inlineActionText}>Hesabımı Sil</Text>
+        </Pressable>
+      </View>
+
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setUsernameNoticeVisible(false), variant: 'secondary' }]}
         message="Kullanıcı adını tekrar değiştirmek için 7 gün beklemelisin."
@@ -274,6 +308,30 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
         message="Şikayet kaydın güvenlik kuyruğuna alındı. Moderasyon paneli ayrı aşamada bağlanacak."
         title="Kullanıcıyı şikayet et"
         visible={reportVisible}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Vazgeç', onPress: () => setAccountAction(null), variant: 'ghost' },
+          {
+            label: accountAction === 'delete' ? 'Kalıcı Olarak Sil' : 'Dondur',
+            onPress: () => {
+              const action = accountAction;
+              setAccountAction(null);
+              if (action) {
+                void handleAccountAction(action);
+              }
+            },
+            variant: 'secondary',
+          },
+        ]}
+        message={
+          accountAction === 'delete'
+            ? 'Hesabını silersen profilin, arkadaşlıkların, mesajların ve uygulama verilerin silinir. Bu işlem geri alınamaz.'
+            : 'Hesabın dondurulunca eşleşmeye giremez ve arkadaşlarına online görünmezsin. İstediğinde aktifleştirebilirsin.'
+        }
+        title={accountAction === 'delete' ? 'Hesabımı Sil' : 'Hesabımı Dondur'}
+        visible={accountAction !== null}
       />
     </PremiumScreen>
   );
@@ -551,5 +609,14 @@ const styles = StyleSheet.create({
   inlineActionText: {
     color: colors.text,
     fontWeight: '700',
+  },
+  dangerAction: {
+    borderColor: 'rgba(255, 124, 156, 0.34)',
+    backgroundColor: 'rgba(255, 124, 156, 0.09)',
+  },
+  accountError: {
+    color: colors.danger,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
   },
 });
