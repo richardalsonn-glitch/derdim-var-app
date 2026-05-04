@@ -12,7 +12,11 @@ type PremiumScreenProps = PropsWithChildren<{
 
 export function PremiumScreen({ children, scroll = true, contentStyle }: PremiumScreenProps) {
   const content = scroll ? (
-    <ScrollView contentContainerStyle={[styles.scrollContent, contentStyle]} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={[styles.scrollContent, contentStyle]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       {children}
     </ScrollView>
   ) : (

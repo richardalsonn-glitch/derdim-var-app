@@ -20,8 +20,22 @@ type ActionCardProps = {
 export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact = false, height, palette, onPress }: ActionCardProps) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.pressable, { transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
-      <LinearGradient colors={[...gradient]} end={{ x: 1, y: 0.85 }} start={{ x: 0, y: 0.15 }} style={[styles.card, compact && styles.cardCompact, height ? { height } : null]}>
+      <LinearGradient
+        colors={[...gradient]}
+        end={{ x: 1, y: 0.85 }}
+        start={{ x: 0, y: 0.15 }}
+        style={[
+          styles.card,
+          compact && styles.cardCompact,
+          height ? { height } : null,
+          {
+            borderColor: `${palette.text}26`,
+            shadowColor: glowColor,
+          },
+        ]}>
         <View pointerEvents="none" style={[styles.glow, { backgroundColor: glowColor }]} />
+        <LinearGradient colors={['rgba(255,255,255,0.16)', 'rgba(8,10,28,0.04)']} pointerEvents="none" style={styles.glassVeil} />
+        <View pointerEvents="none" style={styles.edgeHighlight} />
         <View pointerEvents="none" style={[styles.wave, styles.waveOne]} />
         <View pointerEvents="none" style={[styles.wave, styles.waveTwo]} />
 
@@ -64,10 +78,9 @@ const styles = StyleSheet.create({
     gap: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
-    shadowColor: '#AE52FF',
-    shadowOpacity: 0.34,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.38,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
   },
   cardCompact: {
     minHeight: 98,
@@ -82,7 +95,21 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 999,
-    opacity: 0.18,
+    opacity: 0.24,
+  },
+  glassVeil: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.95,
+  },
+  edgeHighlight: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    height: '52%',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   wave: {
     position: 'absolute',

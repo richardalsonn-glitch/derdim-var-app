@@ -9,8 +9,8 @@ import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { signInWithEmail } from '../services/authService';
 import { AppScreenProps } from '../navigation/types';
+import { restoreAuthProfile, signInWithEmail } from '../services/authService';
 
 export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
   const { profile, updateProfile } = useAppState();
@@ -19,45 +19,105 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
   const [password, setPassword] = useState('12345678');
   const [errorMessage, setErrorMessage] = useState('');
   const [errorVisible, setErrorVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async () => {
-    const result = await signInWithEmail(email, password);
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password.trim()) {
+      setErrorMessage('Lutfen e-posta ve sifre alanlarini doldur.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await signInWithEmail(trimmedEmail, password);
 
     if (result.error) {
+      setIsSubmitting(false);
       setErrorMessage(result.error.message);
       setErrorVisible(true);
       return;
     }
 
-    const authUsername = result.data?.user?.user_metadata?.username;
+    const restoredProfile = await restoreAuthProfile(result.data?.user ?? null);
+
+    if (restoredProfile.error) {
+      setIsSubmitting(false);
+      setErrorMessage(restoredProfile.error.message);
+      setErrorVisible(true);
+      return;
+    }
+
+    const authUsername =
+      restoredProfile.data?.profile?.username ?? result.data?.user?.user_metadata?.username;
+
     updateProfile({
-      email,
-      username: typeof authUsername === 'string' && authUsername.length > 0 ? authUsername : profile.username,
+      email: result.data?.user?.email ?? trimmedEmail,
+      username:
+        typeof authUsername === 'string' && authUsername.length > 0
+          ? authUsername
+          : profile.username,
+      plan: restoredProfile.data?.profile?.plan ?? profile.plan,
+      avatarId: restoredProfile.data?.profile?.avatarId ?? profile.avatarId,
     });
+    setIsSubmitting(false);
     navigation.replace('Home');
   };
 
   return (
     <PremiumScreen>
-      <ScreenHeader onBack={canGoBack ? () => navigation.goBack() : undefined} subtitle="Anonim ses odasına giriş yap" title="Giriş Yap" />
+      <ScreenHeader
+        onBack={canGoBack ? () => navigation.goBack() : undefined}
+        subtitle="Anonim ses odasina giris yap"
+        title="Giris Yap"
+      />
 
       <GlassCard style={styles.card}>
-        <FormInput icon="mail-outline" label="E-posta" onChangeText={setEmail} placeholder="mail adresin" value={email} />
-        <FormInput icon="eye-outline" label="Şifre" onChangeText={setPassword} placeholder="••••••••" secureTextEntry value={password} />
-        <GradientButton onPress={handleLogin} title="Giriş Yap" />
+        <FormInput
+          autoCapitalize="none"
+          icon="mail-outline"
+          keyboardType="email-address"
+          label="E-posta"
+          onChangeText={setEmail}
+          placeholder="mail adresin"
+          value={email}
+        />
+        <FormInput
+          icon="eye-outline"
+          label="Sifre"
+          onChangeText={setPassword}
+          placeholder="********"
+          secureTextEntry
+          value={password}
+        />
+        <GradientButton
+          disabled={isSubmitting}
+          onPress={handleLogin}
+          title={isSubmitting ? 'Giris yapiliyor...' : 'Giris Yap'}
+        />
       </GlassCard>
 
-      <Text style={styles.meta}>Bu uygulama terapi hizmeti sunmaz; anonim sosyal destek ve dertleşme alanı olarak konumlanır.</Text>
-      <Text style={styles.support}>Acil durumlarda profesyonel destek alman önemlidir.</Text>
+      <Text style={styles.meta}>
+        Bu uygulama terapi hizmeti sunmaz; anonim sosyal destek ve dertlesme alani olarak
+        konumlanir.
+      </Text>
+      <Text style={styles.support}>Acil durumlarda profesyonel destek alman onemlidir.</Text>
 
       <Pressable onPress={() => navigation.navigate('Register')}>
-        <Text style={styles.link}>Hesabın yok mu? Kayıt Ol</Text>
+        <Text style={styles.link}>Hesabin yok mu? Kayit Ol</Text>
       </Pressable>
 
       <NoticeModal
-        actions={[{ label: 'Tamam', onPress: () => setErrorVisible(false), variant: 'secondary' }]}
-        message={errorMessage || 'Giriş sırasında bir hata oluştu.'}
-        title="Giriş başarısız"
+        actions={[
+          { label: 'Tamam', onPress: () => setErrorVisible(false), variant: 'secondary' },
+        ]}
+        message={errorMessage || 'Giris sirasinda bir hata olustu.'}
+        title="Giris basarisiz"
         visible={errorVisible}
       />
     </PremiumScreen>

@@ -17,16 +17,36 @@
     "ios": {
       "supportsTablet": false,
       "usesAppleSignIn": true,
+      "bundleIdentifier": "com.derdimvar.app",
+      "buildNumber": "1",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Derdim Var sesli anonim görüşmeler için mikrofon erişimine ihtiyaç duyar."
-      }
+        "NSCameraUsageDescription": "Derdim Var profil ve gorusme deneyimi icin kamera erisimine ihtiyac duyar.",
+        "NSMicrophoneUsageDescription": "Derdim Var sesli anonim gorusmeler icin mikrofon erisimine ihtiyac duyar.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bitcode": false
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#060816"
       },
+      "package": "com.derdimvar.app",
+      "versionCode": 1,
+      "versionName": "1.0.0",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "permissions": [
-        "RECORD_AUDIO"
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.WAKE_LOCK"
       ]
     },
     "web": {
@@ -41,11 +61,17 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Derdim Var sesli anonim görüşmeler için mikrofon erişimine ihtiyaç duyar.",
+          "microphonePermission": "Derdim Var sesli anonim gorusmeler icin mikrofon erisimine ihtiyac duyar.",
           "recordAudioAndroid": true
         }
       ],
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "61d21ac6-bbf7-4ccf-a690-3ba1401552d3"
+      }
+    },
+    "owner": "spacemann"
   }
 }

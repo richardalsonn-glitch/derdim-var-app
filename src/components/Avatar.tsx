@@ -58,6 +58,11 @@ export function Avatar({
 
   return (
     <Pressable onPress={onPress} style={[styles.card, selected && styles.selectedCard, style]}>
+      {selected ? (
+        <LinearGradient colors={['#44E5FF', '#9A46FF']} style={styles.checkBadge}>
+          <Ionicons color={colors.text} name="checkmark" size={16} />
+        </LinearGradient>
+      ) : null}
       {body}
       <Text style={styles.label}>{label ?? avatar.name}</Text>
       <Text style={styles.subtitle}>{subtitle ?? avatar.vibe}</Text>
@@ -77,8 +82,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   selectedCard: {
-    borderColor: 'rgba(255,255,255,0.32)',
-    backgroundColor: 'rgba(153, 70, 255, 0.14)',
+    borderColor: 'rgba(123, 228, 255, 0.92)',
+    backgroundColor: 'rgba(112, 53, 255, 0.22)',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.42,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
   },
   core: {
     overflow: 'hidden',
@@ -88,7 +98,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.18)',
   },
   selectedCore: {
-    borderColor: 'rgba(255,255,255,0.72)',
+    borderColor: 'rgba(255,255,255,0.86)',
   },
   halo: {
     position: 'absolute',
@@ -129,6 +139,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
+  },
+  checkBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   label: {
     color: colors.text,
