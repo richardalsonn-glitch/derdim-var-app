@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { GlassCard } from '../components/GlassCard';
@@ -10,6 +10,7 @@ import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { deleteCurrentAccount, freezeCurrentAccount } from '../services/accountService';
+import { submitSupportReport } from '../services/supportService';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 type InfoItem = {
@@ -59,6 +60,9 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
   const [confirmAction, setConfirmAction] = useState<'freeze' | 'delete' | null>(null);
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [supportVisible, setSupportVisible] = useState(false);
+  const [supportMessage, setSupportMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   async function handleFreeze() {
     setPending(true);
@@ -85,6 +89,24 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
     }
 
     navigation.reset({ index: 0, routes: [{ name: 'Splash' }] });
+  }
+
+  async function handleSupportSubmit() {
+    setPending(true);
+    const result = await submitSupportReport({
+      type: 'support',
+      message: supportMessage,
+    });
+    setPending(false);
+
+    if (result.error) {
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Talebin gönderilemedi. Lütfen tekrar deneyin.'));
+      return;
+    }
+
+    setSupportVisible(false);
+    setSupportMessage('');
+    setSuccessMessage('Talebin alındı. En kısa sürede inceleyeceğiz.');
   }
 
   function renderItem(item: InfoItem) {
@@ -132,7 +154,40 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
       <GlassCard style={styles.card}>
         <Text style={styles.sectionTitle}>Destek</Text>
         {supportItems.map(renderItem)}
+        <Pressable onPress={() => setSupportVisible(true)} style={styles.row}>
+          <View style={styles.rowCopy}>
+            <Text style={styles.rowTitle}>Talep Gönder</Text>
+            <Text numberOfLines={1} style={styles.rowText}>Güvenlik, taciz, teknik sorun veya hesap konularını bize ilet.</Text>
+          </View>
+          <Ionicons color={colors.cyan} name="send" size={18} />
+        </Pressable>
       </GlassCard>
+
+      <NoticeModal
+        actions={[{ label: 'Tamam', onPress: () => setSuccessMessage(''), variant: 'secondary' }]}
+        message={successMessage}
+        title="Talep alındı"
+        visible={Boolean(successMessage)}
+      />
+
+      <NoticeModal
+        actions={[
+          { label: 'Vazgeç', onPress: () => setSupportVisible(false), variant: 'ghost' },
+          { label: 'Gönder', onPress: () => void handleSupportSubmit(), variant: 'secondary' },
+        ]}
+        message=""
+        title="Şikayet Et / Bize Ulaş"
+        visible={supportVisible}
+      >
+        <TextInput
+          multiline
+          onChangeText={setSupportMessage}
+          placeholder="Konu ve açıklama yaz..."
+          placeholderTextColor={colors.dim}
+          style={styles.supportInput}
+          value={supportMessage}
+        />
+      </NoticeModal>
 
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setSelectedItem(null), variant: 'secondary' }]}
@@ -207,5 +262,15 @@ const styles = StyleSheet.create({
   error: {
     color: colors.danger,
     fontWeight: '700',
+  },
+  supportInput: {
+    minHeight: 110,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSoft,
+    color: colors.text,
+    padding: spacing.md,
+    textAlignVertical: 'top',
   },
 });

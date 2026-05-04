@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { GlassCard } from '../components/GlassCard';
 import { PremiumScreen } from '../components/PremiumScreen';
@@ -10,20 +10,28 @@ import { GiftHistory, listGiftHistory } from '../services/socialService';
 import { GiftItem } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
-function GiftRow({ item }: { item: GiftItem & { count?: number } }) {
+type GiftDisplay = GiftItem & { count?: number; coinCost?: number };
+
+function GiftRow({ item, onSelect }: { item: GiftDisplay; onSelect?: () => void }) {
   return (
     <GlassCard style={styles.giftCard}>
       <Text style={styles.symbol}>{item.symbol}</Text>
       <View style={styles.giftCopy}>
         <Text style={styles.title}>{item.name}</Text>
         <Text style={styles.muted}>{item.caption}</Text>
+        {item.coinCost ? <Text style={styles.coin}>{item.coinCost} jeton</Text> : null}
       </View>
       <Text style={styles.count}>x{item.count ?? 0}</Text>
+      {onSelect ? (
+        <Pressable onPress={onSelect} style={styles.selectButton}>
+          <Text style={styles.selectText}>Seç</Text>
+        </Pressable>
+      ) : null}
     </GlassCard>
   );
 }
 
-function GiftSection({ title, data }: { title: string; data: Array<GiftItem & { count?: number }> }) {
+function GiftSection({ title, data, onSelect }: { title: string; data: GiftDisplay[]; onSelect?: () => void }) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -34,7 +42,7 @@ function GiftSection({ title, data }: { title: string; data: Array<GiftItem & { 
           data={data}
           horizontal
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <GiftRow item={item} />}
+          renderItem={({ item }) => <GiftRow item={item} onSelect={onSelect} />}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalList}
         />
@@ -47,6 +55,7 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
   const [history, setHistory] = useState<GiftHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [noticeMessage, setNoticeMessage] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -83,8 +92,17 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
         <>
           <GiftSection data={history.received} title="Alınan hediyeler" />
           <GiftSection data={history.sent} title="Gönderilen hediyeler" />
-          <GiftSection data={history.popular.map((gift) => ({ ...gift, count: 0 }))} title="Popüler hediyeler" />
+          <GiftSection
+            data={history.popular.map((gift) => ({ ...gift, count: 0 }))}
+            onSelect={() => setNoticeMessage('Hediye göndermek için önce bir sohbet veya görüşme başlat. Hediye paketleri yakında mağaza içi satın alma ile açılacak.')}
+            title="Popüler hediyeler"
+          />
         </>
+      ) : null}
+      {noticeMessage ? (
+        <GlassCard>
+          <Text style={styles.empty}>{noticeMessage}</Text>
+        </GlassCard>
       ) : null}
     </PremiumScreen>
   );
@@ -107,8 +125,8 @@ const styles = StyleSheet.create({
     paddingRight: spacing.lg,
   },
   giftCard: {
-    width: 210,
-    minHeight: 106,
+    width: 230,
+    minHeight: 122,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -129,9 +147,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
   },
+  coin: {
+    color: colors.gold,
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   count: {
     color: colors.gold,
     fontWeight: '900',
+  },
+  selectButton: {
+    position: 'absolute',
+    right: 12,
+    bottom: 10,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  selectText: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '800',
   },
   empty: {
     color: colors.muted,

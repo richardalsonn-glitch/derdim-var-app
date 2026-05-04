@@ -1,6 +1,7 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-import { defaultProfile, getAvatarById, gifts, receivedGifts } from '../data/mockData';
+import { giftCatalog } from '../data/giftCatalog';
+import { defaultProfile, getAvatarById, gifts } from '../data/mockData';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { FriendSummary, GiftItem, MembershipPlan } from '../types';
 import { getFriendlyErrorMessage, isMissingTableError } from '../utils/errorMessages';
@@ -37,15 +38,17 @@ export type GiftHistory = {
 };
 
 export type FriendListData = {
-  friends: Array<FriendSummary & { isOnline: boolean; lastSeenAt?: string | null; level: number; dermanScore: number }>;
+  friends: Array<FriendSummary & { isOnline: boolean; lastSeenAt?: string | null; callStatus?: 'available' | 'busy' | 'offline'; level: number; dermanScore: number }>;
   incomingRequests: Array<FriendSummary & { requestId: string }>;
   outgoingRequests: Array<FriendSummary & { requestId: string }>;
 };
+type SocialProfileSummary = FriendSummary & {
+  isOnline?: boolean;
+  lastSeenAt?: string | null;
+  callStatus?: 'available' | 'busy' | 'offline';
+};
 
-const fallbackFriends: FriendListData['friends'] = [
-  { id: 'demo-luna', username: 'Luna_24', avatarId: 'f-2', plan: 'vip', isOnline: true, level: 3, dermanScore: 4.8 },
-  { id: 'demo-atlas', username: 'Atlas_28', avatarId: 'm-1', plan: 'plus', isOnline: false, level: 2, dermanScore: 4.6 },
-];
+const emptyFriendData: FriendListData = { friends: [], incomingRequests: [], outgoingRequests: [] };
 
 function getPlan(value: unknown): MembershipPlan {
   return value === 'plus' || value === 'vip' ? value : 'free';
@@ -63,17 +66,17 @@ async function getUserId(): Promise<ServiceResult<string>> {
 
 async function fetchProfiles(userIds: string[]) {
   if (!isSupabaseConfigured || userIds.length === 0) {
-    return new Map<string, FriendSummary & { isOnline?: boolean; lastSeenAt?: string | null }>();
+    return new Map<string, SocialProfileSummary>();
   }
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, username, avatar_id, plan, is_online, last_seen_at')
+    .select('user_id, username, avatar_id, plan, is_online, last_seen_at, call_status')
     .in('user_id', userIds);
 
   if (error) {
     console.error('[social] fetchProfiles failed:', error.message);
-    return new Map<string, FriendSummary & { isOnline?: boolean; lastSeenAt?: string | null }>();
+    return new Map<string, SocialProfileSummary>();
   }
 
   return new Map(
@@ -86,6 +89,7 @@ async function fetchProfiles(userIds: string[]) {
         plan: getPlan(profile.plan),
         isOnline: Boolean(profile.is_online),
         lastSeenAt: profile.last_seen_at ?? null,
+        callStatus: profile.call_status === 'busy' || profile.call_status === 'offline' ? profile.call_status : 'available',
       },
     ]),
   );
@@ -96,7 +100,7 @@ export async function listFriends(): Promise<ServiceResult<FriendListData>> {
 
   if (!isSupabaseConfigured || userIdResult.error || !userIdResult.data) {
     return {
-      data: { friends: fallbackFriends, incomingRequests: [], outgoingRequests: [] },
+      data: emptyFriendData,
       error: null,
     };
   }
@@ -135,7 +139,10 @@ export async function listFriends(): Promise<ServiceResult<FriendListData>> {
     data: {
       friends: rows
         .filter((row: any) => row.status === 'accepted')
-        .map((row: any) => ({ ...toSummary(row), isOnline: Boolean(toSummary(row).isOnline), level: 2, dermanScore: 4.7 })),
+        .map((row: any) => {
+          const summary = toSummary(row);
+          return { ...summary, isOnline: Boolean(summary.isOnline), callStatus: summary.callStatus ?? 'offline', level: 2, dermanScore: 4.7 };
+        }),
       incomingRequests: rows
         .filter((row: any) => row.status === 'pending' && row.receiver_id === userId)
         .map((row: any) => ({ ...toSummary(row), requestId: row.id })),
@@ -169,16 +176,7 @@ export async function createOrGetThread(peerUserId: string): Promise<ServiceResu
   }
 
   if (!isSupabaseConfigured || peerUserId.startsWith('demo-')) {
-    return {
-      data: {
-        id: `demo-thread-${peerUserId}`,
-        peer: fallbackFriends.find((friend) => friend.id === peerUserId) ?? fallbackFriends[0],
-        lastMessage: 'Demo sohbet hazir.',
-        lastMessageAt: new Date().toISOString(),
-        unreadCount: 0,
-      },
-      error: null,
-    };
+    return { data: null, error: { message: 'Sohbet açmak için önce gerçek bir arkadaş seçmelisin.' } };
   }
 
   const userId = userIdResult.data;
@@ -226,15 +224,7 @@ export async function listThreads(): Promise<ServiceResult<ChatThreadSummary[]>>
 
   if (!isSupabaseConfigured || userIdResult.error || !userIdResult.data) {
     return {
-      data: [
-        {
-          id: 'demo-thread-demo-luna',
-          peer: fallbackFriends[0],
-          lastMessage: 'Merhaba, bugun nasilsin?',
-          lastMessageAt: new Date().toISOString(),
-          unreadCount: 1,
-        },
-      ],
+      data: [],
       error: null,
     };
   }
@@ -420,9 +410,9 @@ export async function listGiftHistory(): Promise<ServiceResult<GiftHistory>> {
   if (!isSupabaseConfigured) {
     return {
       data: {
-        received: receivedGifts.map((gift) => ({ ...gifts.find((item) => item.id === gift.id)!, count: gift.count })).filter(Boolean),
-        sent: [{ ...gifts[1], count: 2 }],
-        popular: gifts.slice(0, 4),
+        received: [],
+        sent: [],
+        popular: giftCatalog,
       },
       error: null,
     };
@@ -442,7 +432,7 @@ export async function listGiftHistory(): Promise<ServiceResult<GiftHistory>> {
   if (error) {
     console.error('[social] listGiftHistory failed:', error.message);
     if (isMissingTableError(error)) {
-      return { data: { received: [], sent: [], popular: gifts.slice(0, 4) }, error: null };
+      return { data: { received: [], sent: [], popular: giftCatalog }, error: null };
     }
 
     return { data: null, error: { message: getFriendlyErrorMessage(error, 'Hediye geçmişi yüklenemedi.') } };
@@ -463,7 +453,7 @@ export async function listGiftHistory(): Promise<ServiceResult<GiftHistory>> {
     data: {
       received: toGiftList(countByType((data ?? []).filter((row: any) => row.receiver_id === userIdResult.data))),
       sent: toGiftList(countByType((data ?? []).filter((row: any) => row.sender_id === userIdResult.data))),
-      popular: gifts.slice(0, 4),
+      popular: giftCatalog,
     },
     error: null,
   };

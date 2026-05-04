@@ -10,6 +10,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
 import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { startFriendCall } from '../services/friendCallService';
 import { createOrGetThread, FriendListData, listFriends, updateFriendship } from '../services/socialService';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
@@ -72,6 +73,24 @@ export function FriendsScreen({ navigation }: AppScreenProps<'Friends'>) {
     await loadFriends();
   }
 
+  async function callFriend(friend: FriendItem) {
+    const result = await startFriendCall(friend);
+
+    if (!result.allowed) {
+      setErrorMessage(result.message ?? 'Arkadaş çağrısı başlatılamadı. Lütfen tekrar deneyin.');
+      return;
+    }
+
+    navigation.navigate('VoiceCall', {
+      friendCall: true,
+      matchReady: true,
+      matchedUserId: friend.id,
+      partnerName: friend.username,
+      partnerAvatarId: friend.avatarId,
+      durationSeconds: 300,
+    });
+  }
+
   function renderFriend({ item }: { item: FriendItem }) {
     return (
       <Pressable onPress={() => navigation.navigate('FriendProfile', { friendId: item.id })}>
@@ -84,7 +103,7 @@ export function FriendsScreen({ navigation }: AppScreenProps<'Friends'>) {
           <Pressable onPress={() => void openMessage(item.id)} style={styles.iconAction}>
             <Ionicons color={colors.cyan} name="chatbubble-ellipses" size={18} />
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('VoiceCall', { matchedUserId: item.id, matchReady: true })} style={styles.iconAction}>
+          <Pressable onPress={() => void callFriend(item)} style={styles.iconAction}>
             <Ionicons color={colors.pink} name="call" size={18} />
           </Pressable>
         </GlassCard>

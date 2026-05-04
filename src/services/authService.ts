@@ -258,6 +258,24 @@ export async function signUpWithEmail(
     },
   });
 
+  if (error) {
+    console.warn('[auth] signUp failed:', { code: error.code, message: error.message });
+  }
+
+  if (!error && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return {
+      data: null,
+      error: { message: getFriendlyErrorMessage('user_already_exists', 'Bu e-posta ile kayıtlı bir hesap var. Giriş yapmayı deneyebilirsin.') },
+    };
+  }
+
+  if (!error && data.user && !data.session) {
+    return {
+      data: null,
+      error: { message: 'E-posta doğrulaması gerekiyor. Lütfen e-postanı kontrol et.' },
+    };
+  }
+
   if (!error && data.user) {
     await upsertProfileRecord(data.user, {
       username: normalizeText(username) || 'user',
@@ -284,6 +302,10 @@ export async function signInWithEmail(
     email,
     password,
   });
+
+  if (error) {
+    console.warn('[auth] signIn failed:', { code: error.code, message: error.message });
+  }
 
   return {
     data: error ? null : { user: data.user, session: data.session },

@@ -3,7 +3,7 @@ import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, radius, spacing } from '../constants/theme';
-import { gifts } from '../data/mockData';
+import { giftCatalog } from '../data/giftCatalog';
 import { GiftItem } from '../types';
 import { GlassCard } from './GlassCard';
 
@@ -35,7 +35,7 @@ export function GiftModal({ visible, onClose, onSelect }: GiftModalProps) {
           </View>
 
           <View style={styles.grid}>
-            {gifts.map((gift) => (
+            {giftCatalog.map((gift) => (
               <Pressable key={gift.id} onPress={() => onSelect(gift)} style={styles.gridItemWrap}>
                 <LinearGradient colors={gift.accent} style={styles.giftGlow}>
                   <View style={styles.giftCard}>

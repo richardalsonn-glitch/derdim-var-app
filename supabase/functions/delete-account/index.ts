@@ -77,7 +77,7 @@ Deno.serve(async (request) => {
     await safeQuery('friendships cleanup', admin.from('friendships').delete().or(`requester_id.eq.${userId},receiver_id.eq.${userId}`));
     await safeQuery('profiles cleanup', admin.from('profiles').delete().eq('user_id', userId));
 
-    const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
+    const { error: deleteError } = await admin.auth.admin.deleteUser(userId, false);
 
     if (deleteError) {
       return jsonResponse(500, { error: 'Auth kullanicisi silinemedi.' });

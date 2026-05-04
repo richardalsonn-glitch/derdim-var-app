@@ -60,7 +60,7 @@ export function RegisterScreen({ navigation }: AppScreenProps<'Register'>) {
   };
 
   return (
-    <PremiumScreen>
+    <PremiumScreen contentStyle={styles.screenContent}>
       <ScreenHeader onBack={() => navigation.goBack()} subtitle="Hızlı kayıt, anonim başlangıç" title="Kayıt Ol" />
       <ProgressDots current={1} total={4} />
 
@@ -100,7 +100,7 @@ export function RegisterScreen({ navigation }: AppScreenProps<'Register'>) {
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setErrorVisible(false), variant: 'secondary' }]}
         message={errorMessage || 'Kayıt sırasında bir hata oluştu.'}
-        title="Kayıt başarısız"
+        title="Kayıt tamamlanamadı"
         visible={errorVisible}
       />
     </PremiumScreen>
@@ -110,6 +110,10 @@ export function RegisterScreen({ navigation }: AppScreenProps<'Register'>) {
 const styles = StyleSheet.create({
   card: {
     gap: spacing.md,
+  },
+  screenContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   link: {
     color: colors.pink,

@@ -28,12 +28,20 @@ export function getFriendlyErrorMessage(error: unknown, fallback = DEFAULT_ERROR
     return fallback;
   }
 
-  if (lower.includes('invalid login credentials') || lower.includes('user not found') || lower.includes('deleted account')) {
+  if (lower.includes('email not confirmed') || lower.includes('email confirmation')) {
+    return 'E-posta doğrulaması gerekiyor. Lütfen e-postanı kontrol et.';
+  }
+
+  if (lower.includes('invalid login credentials') || lower.includes('invalid credentials')) {
+    return 'E-posta veya şifre hatalı. Bilgilerini kontrol edip tekrar dene.';
+  }
+
+  if (lower.includes('user not found') || lower.includes('deleted account')) {
     return 'Bu hesap silinmiş veya bilgiler hatalı. Lütfen yeniden kayıt ol.';
   }
 
-  if (lower.includes('email not confirmed')) {
-    return 'E-posta adresini doğrulaman gerekiyor.';
+  if (lower.includes('user_already_exists') || lower.includes('user already exists')) {
+    return 'Bu e-posta ile kayıtlı bir hesap var. Giriş yapmayı deneyebilirsin.';
   }
 
   if (lower.includes('user already registered') || lower.includes('already registered')) {

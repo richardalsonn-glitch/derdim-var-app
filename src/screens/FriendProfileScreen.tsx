@@ -10,7 +10,9 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { colors, spacing } from '../constants/theme';
 import { defaultProfile, getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { startFriendCall } from '../services/friendCallService';
 import { createOrGetThread, FriendListData, listFriends } from '../services/socialService';
+import { submitSupportReport } from '../services/supportService';
 
 export function FriendProfileScreen({ navigation, route }: AppScreenProps<'FriendProfile'>) {
   const [friend, setFriend] = useState<FriendListData['friends'][number] | null>(null);
@@ -31,6 +33,7 @@ export function FriendProfileScreen({ navigation, route }: AppScreenProps<'Frien
         avatarId: defaultProfile.avatarId,
         plan: 'free',
         isOnline: false,
+        callStatus: 'offline',
         level: 1,
         dermanScore: 0,
       });
@@ -42,6 +45,11 @@ export function FriendProfileScreen({ navigation, route }: AppScreenProps<'Frien
     };
   }, [route.params.friendId]);
 
+  function showNotice(message: string) {
+    setNoticeText(message);
+    setNoticeVisible(true);
+  }
+
   async function openMessage() {
     if (!friend) {
       return;
@@ -51,12 +59,45 @@ export function FriendProfileScreen({ navigation, route }: AppScreenProps<'Frien
 
     if (result.data) {
       navigation.navigate('Chat', { threadId: result.data.id, peerUserId: friend.id });
+    } else {
+      showNotice(result.error?.message ?? 'Sohbet açılamadı. Lütfen tekrar deneyin.');
     }
   }
 
-  function showStub(message: string) {
-    setNoticeText(message);
-    setNoticeVisible(true);
+  async function callFriend() {
+    if (!friend) {
+      return;
+    }
+
+    const result = await startFriendCall(friend);
+
+    if (!result.allowed) {
+      showNotice(result.message ?? 'Arkadaş çağrısı başlatılamadı. Lütfen tekrar deneyin.');
+      return;
+    }
+
+    navigation.navigate('VoiceCall', {
+      friendCall: true,
+      matchReady: true,
+      matchedUserId: friend.id,
+      partnerName: friend.username,
+      partnerAvatarId: friend.avatarId,
+      durationSeconds: 300,
+    });
+  }
+
+  async function reportFriend() {
+    if (!friend) {
+      return;
+    }
+
+    const result = await submitSupportReport({
+      type: 'report',
+      reportedUserId: friend.id,
+      message: `Arkadaş profilinden şikayet: ${friend.username}`,
+    });
+
+    showNotice(result.error ? result.error.message : 'Şikayetin alındı. En kısa sürede inceleyeceğiz.');
   }
 
   if (loading || !friend) {
@@ -78,9 +119,9 @@ export function FriendProfileScreen({ navigation, route }: AppScreenProps<'Frien
 
       <View style={styles.actions}>
         <GradientButton icon="chatbubble-ellipses" onPress={() => void openMessage()} title="Mesaj Yaz" />
-        <GradientButton icon="call" onPress={() => navigation.navigate('VoiceCall', { matchedUserId: friend.id, matchReady: true })} title="Ara" variant="secondary" />
-        <GradientButton onPress={() => showStub('Arkadaşlıktan çıkarma kaydı alındı.')} title="Arkadaşlıktan Çıkar" variant="ghost" />
-        <GradientButton onPress={() => showStub('Engelleme ve şikayet kaydı alındı.')} title="Engelle / Şikayet Et" variant="ghost" />
+        <GradientButton icon="call" onPress={() => void callFriend()} title="Ara" variant="secondary" />
+        <GradientButton onPress={() => showNotice('Arkadaşlıktan çıkarma işlemi yakında arkadaş yönetimi paneline bağlanacak.')} title="Arkadaşlıktan Çıkar" variant="ghost" />
+        <GradientButton onPress={() => void reportFriend()} title="Engelle / Şikayet Et" variant="ghost" />
       </View>
 
       <NoticeModal

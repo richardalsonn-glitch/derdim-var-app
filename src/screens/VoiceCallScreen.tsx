@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, Vibration, View, useWindowDimensions } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, Vibration, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -150,7 +150,24 @@ function getUntilNextReset() {
   return `${hours}s ${minutes}dk`;
 }
 
-function buildRealtimePartner() {
+function buildRealtimePartner(routePartner?: {
+  matchedUserId?: string;
+  partnerName?: string;
+  partnerAvatarId?: string;
+}) {
+  if (routePartner?.matchedUserId && routePartner.partnerName) {
+    const avatarId = routePartner.partnerAvatarId ?? 'f-1';
+    return {
+      id: routePartner.matchedUserId,
+      username: routePartner.partnerName,
+      avatarId,
+      gender: getAvatarById(avatarId).gender,
+      plan: 'free',
+      dermanScore: 4.7,
+      level: 1,
+    } satisfies MatchPartner;
+  }
+
   const activeMatch = getActiveMatch();
   const partnerProfile = activeMatch?.partnerProfile;
 
@@ -222,7 +239,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   } = useAppState();
   const { width, height } = useWindowDimensions();
   const metrics = useMemo(() => getMetrics(width, height), [width, height]);
-  const realtimePartner = useMemo(() => buildRealtimePartner(), []);
+  const realtimePartner = useMemo(() => buildRealtimePartner(route.params), [route.params]);
   const isRealtimeSession = Boolean(route.params?.matchReady && realtimePartner);
   const [phase, setPhase] = useState<CallPhase>(isRealtimeSession ? 'matched' : 'searching');
   const [matchSeed, setMatchSeed] = useState(0);
@@ -265,7 +282,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   const blockedIdsKey = blockedUserIds.join('|');
 
   const { remainingSeconds, addSeconds, reset, setIsRunning } = useCountdownTimer({
-    initialSeconds: CALL_SECONDS,
+    initialSeconds: route.params?.durationSeconds ?? CALL_SECONDS,
     autoStart: false,
     onExpire: () => {
       finishConversation();
@@ -297,6 +314,21 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
       console.warn('[match] leaveQueue failed:', result.error.message);
     }
 
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
+  }
+
+  async function returnHomeSafely() {
+    stopRingingSound();
+
+    if (isRealtimeSession) {
+      await leaveRealtimeMatchAndGoHome();
+      return;
+    }
+
+    await disconnectVoiceRoom();
     navigation.reset({
       index: 0,
       routes: [{ name: 'Home' }],
@@ -705,6 +737,15 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     }
   }, [isRealtimeSession]);
 
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      void returnHomeSafely();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [isRealtimeSession]);
+
   function beginNextMatch() {
     if (isRealtimeSession) {
       void leaveRealtimeMatchAndGoHome();
@@ -839,13 +880,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
             <View style={styles.headerRow}>
               <Pressable
                 onPress={() => {
-                  stopRingingSound();
-                  if (isRealtimeSession) {
-                    void leaveRealtimeMatchAndGoHome();
-                    return;
-                  }
-
-                  navigation.goBack();
+                  void returnHomeSafely();
                 }}
                 style={[styles.backButton, { width: metrics.headerButton, height: metrics.headerButton, borderRadius: metrics.headerButton / 2 }]}
               >

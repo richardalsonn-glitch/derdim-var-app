@@ -1,3 +1,4 @@
+import { ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '../constants/theme';
@@ -16,16 +17,18 @@ type NoticeModalProps = {
   message: string;
   actions: NoticeAction[];
   onClose?: () => void;
+  children?: ReactNode;
 };
 
-export function NoticeModal({ visible, title, message, actions, onClose }: NoticeModalProps) {
+export function NoticeModal({ visible, title, message, actions, onClose, children }: NoticeModalProps) {
   return (
     <Modal animationType="fade" transparent visible={visible}>
       <View style={styles.backdrop}>
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
         <GlassCard style={styles.card}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+          {children}
           <View style={styles.actions}>
             {actions.map((action) => (
               <GradientButton

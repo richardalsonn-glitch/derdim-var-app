@@ -65,13 +65,14 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
           : profile.username,
       plan: restoredProfile.data?.profile?.plan ?? profile.plan,
       avatarId: restoredProfile.data?.profile?.avatarId ?? profile.avatarId,
+      isFrozen: restoredProfile.data?.profile?.isFrozen ?? profile.isFrozen,
     });
     setIsSubmitting(false);
-    navigation.replace('Home');
+    navigation.replace(restoredProfile.data?.profile?.isFrozen ? 'FrozenAccount' : 'Home');
   };
 
   return (
-    <PremiumScreen>
+    <PremiumScreen contentStyle={styles.screenContent}>
       <ScreenHeader
         onBack={canGoBack ? () => navigation.goBack() : undefined}
         subtitle="Anonim ses odasina giris yap"
@@ -118,7 +119,7 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
           { label: 'Tamam', onPress: () => setErrorVisible(false), variant: 'secondary' },
         ]}
         message={errorMessage || 'Giris sirasinda bir hata olustu.'}
-        title="Giris basarisiz"
+        title="Giriş tamamlanamadı"
         visible={errorVisible}
       />
     </PremiumScreen>
@@ -128,6 +129,10 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
 const styles = StyleSheet.create({
   card: {
     gap: spacing.md,
+  },
+  screenContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   meta: {
     color: colors.muted,

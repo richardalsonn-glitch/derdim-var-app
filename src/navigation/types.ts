@@ -13,6 +13,10 @@ export type RootStackParamList = {
         matchReady?: boolean;
         matchedUserId?: string;
         queueMode?: MatchmakingMode;
+        friendCall?: boolean;
+        partnerName?: string;
+        partnerAvatarId?: string;
+        durationSeconds?: number;
       }
     | undefined;
   Matching: undefined;
