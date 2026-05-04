@@ -9,6 +9,7 @@ import { Avatar } from '../components/Avatar';
 import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GiftCelebrationOverlay, GiftModal } from '../components/GiftModal';
 import { NoticeModal } from '../components/NoticeModal';
+import { isLiveKitEnabled } from '../config/features';
 import { colors, gradients, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, topics } from '../data/mockData';
@@ -355,6 +356,10 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }
 
   function startRingingSound() {
+    if (!isLiveKitEnabled) {
+      return;
+    }
+
     const player = ringingAudioRef.current;
 
     if (!player) {
@@ -376,6 +381,12 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }
 
   useEffect(() => {
+    if (!isLiveKitEnabled) {
+      countdownAudioRef.current = null;
+      ringingAudioRef.current = null;
+      return;
+    }
+
     setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
     const countdownPlayer = createAudioPlayer(COUNTDOWN_AUDIO_SOURCE);
     countdownPlayer.volume = 0.5;
@@ -408,6 +419,11 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     let mounted = true;
 
     const prepareVoice = async () => {
+      if (!isLiveKitEnabled) {
+        setMicrophonePermissionGranted(true);
+        return;
+      }
+
       const permission = await requestMicrophonePermission();
 
       if (!mounted) {
@@ -471,6 +487,24 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     let cancelled = false;
 
     const connectVoice = async () => {
+      if (!isLiveKitEnabled) {
+        const joinResult = await joinRoom(partner.id);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (joinResult.error || !joinResult.data) {
+          showVoiceError(joinResult.error?.message ?? 'Mock sesli gorusme baslatilamadi.');
+          return;
+        }
+
+        voiceJoinedRef.current = true;
+        setMicEnabled(!joinResult.data.muted);
+        setSpeakerEnabled(joinResult.data.speakerEnabled);
+        return;
+      }
+
       const currentUserResult = await getCurrentUser();
 
       if (cancelled) {
@@ -520,6 +554,10 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   useEffect(() => {
     if (phase !== 'searching') {
       stopRingingSound();
+      return;
+    }
+
+    if (!isLiveKitEnabled) {
       return;
     }
 

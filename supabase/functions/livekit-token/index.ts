@@ -16,6 +16,37 @@ function jsonResponse(status: number, payload: Record<string, unknown>) {
   });
 }
 
+async function writeRequestLog(
+  adminSupabase: ReturnType<typeof createClient>,
+  payload: {
+    userId?: string | null;
+    peerUserId?: string | null;
+    roomId?: string | null;
+    requesterIp?: string | null;
+    status: 'success' | 'error';
+    statusCode: number;
+    rejectionReason?: string | null;
+    requestPath: string;
+    requestMethod: string;
+  },
+) {
+  const { error } = await adminSupabase.from('livekit_request_logs').insert({
+    user_id: payload.userId ?? null,
+    peer_user_id: payload.peerUserId ?? null,
+    room_id: payload.roomId ?? null,
+    requester_ip: payload.requesterIp ?? null,
+    status: payload.status,
+    status_code: payload.statusCode,
+    rejection_reason: payload.rejectionReason ?? null,
+    request_path: payload.requestPath,
+    request_method: payload.requestMethod,
+  });
+
+  if (error) {
+    console.error(`[livekit-token] request log write failed: ${error.message}`);
+  }
+}
+
 function getBearerToken(request: Request) {
   const authorization = request.headers.get('Authorization') ?? '';
 
@@ -71,6 +102,8 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
   const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const requesterIp = getClientIp(request);
+  const requestPath = new URL(request.url).pathname;
 
   if (!apiKey || !apiSecret || !wsUrl || !supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
     return jsonResponse(500, { error: 'Server env ayarlari eksik.' });
@@ -101,6 +134,20 @@ Deno.serve(async (request) => {
   } = await supabase.auth.getUser(accessToken);
 
   if (authError || !user?.id) {
+    if (request.method === 'POST') {
+      await writeRequestLog(adminSupabase, {
+        userId: null,
+        peerUserId: null,
+        roomId: null,
+        requesterIp,
+        status: 'error',
+        statusCode: 401,
+        rejectionReason: accessToken ? 'invalid_auth' : 'missing_auth',
+        requestPath,
+        requestMethod: request.method,
+      });
+    }
+
     return jsonResponse(401, { error: 'Session dogrulanamadi.' });
   }
 
@@ -121,16 +168,39 @@ Deno.serve(async (request) => {
     const normalizedPeerUserId = normalizePeerUserId(peerUserId);
 
     if (!normalizedPeerUserId) {
+      await writeRequestLog(adminSupabase, {
+        userId: user.id,
+        peerUserId: null,
+        roomId: null,
+        requesterIp,
+        status: 'error',
+        statusCode: 400,
+        rejectionReason: 'invalid_peer_user_id',
+        requestPath,
+        requestMethod: request.method,
+      });
+
       return jsonResponse(400, { error: 'peerUserId gerekli.' });
     }
 
     if (normalizedPeerUserId === user.id) {
+      await writeRequestLog(adminSupabase, {
+        userId: user.id,
+        peerUserId: normalizedPeerUserId,
+        roomId: null,
+        requesterIp,
+        status: 'error',
+        statusCode: 400,
+        rejectionReason: 'self_room_request',
+        requestPath,
+        requestMethod: request.method,
+      });
+
       return jsonResponse(400, { error: 'Kullanici kendi odasi icin token isteyemez.' });
     }
 
     const roomName = await buildPrivateRoomName(user.id, normalizedPeerUserId, apiSecret);
     const expiresAt = new Date(Date.now() + LIVEKIT_TOKEN_TTL_MINUTES * 60_000).toISOString();
-    const requesterIp = getClientIp(request);
     const userAgent = request.headers.get('user-agent') ?? '';
     const { data: issueResult, error: issueError } = await adminSupabase.rpc('issue_livekit_room_session', {
       p_user_id: user.id,
@@ -142,6 +212,18 @@ Deno.serve(async (request) => {
     });
 
     if (issueError) {
+      await writeRequestLog(adminSupabase, {
+        userId: user.id,
+        peerUserId: normalizedPeerUserId,
+        roomId: roomName,
+        requesterIp,
+        status: 'error',
+        statusCode: 500,
+        rejectionReason: 'session_persistence_error',
+        requestPath,
+        requestMethod: request.method,
+      });
+
       return jsonResponse(500, { error: 'LiveKit oda oturumu kaydedilemedi.' });
     }
 
@@ -154,12 +236,48 @@ Deno.serve(async (request) => {
           : 429;
 
       if (decision?.reason === 'active_room_exists') {
+        await writeRequestLog(adminSupabase, {
+          userId: user.id,
+          peerUserId: normalizedPeerUserId,
+          roomId: roomName,
+          requesterIp,
+          status: 'error',
+          statusCode,
+          rejectionReason: 'duplicate_session',
+          requestPath,
+          requestMethod: request.method,
+        });
+
         return jsonResponse(statusCode, { error: 'Ayni anda yalnizca tek aktif sesli oda kullanilabilir.' });
       }
 
       if (decision?.reason === 'abuse_window_exceeded' || decision?.reason === 'rate_limit_exceeded') {
+        await writeRequestLog(adminSupabase, {
+          userId: user.id,
+          peerUserId: normalizedPeerUserId,
+          roomId: roomName,
+          requesterIp,
+          status: 'error',
+          statusCode,
+          rejectionReason: 'rate_limit',
+          requestPath,
+          requestMethod: request.method,
+        });
+
         return jsonResponse(statusCode, { error: 'Cok fazla token istegi gonderildi. Lutfen daha sonra tekrar deneyin.' });
       }
+
+      await writeRequestLog(adminSupabase, {
+        userId: user.id,
+        peerUserId: normalizedPeerUserId,
+        roomId: roomName,
+        requesterIp,
+        status: 'error',
+        statusCode,
+        rejectionReason: typeof decision?.reason === 'string' ? decision.reason : 'request_rejected',
+        requestPath,
+        requestMethod: request.method,
+      });
 
       return jsonResponse(statusCode, { error: 'LiveKit token istegi reddedildi.' });
     }
@@ -180,8 +298,32 @@ Deno.serve(async (request) => {
 
     const token = await livekitToken.toJwt();
 
+    await writeRequestLog(adminSupabase, {
+      userId: user.id,
+      peerUserId: normalizedPeerUserId,
+      roomId: roomName,
+      requesterIp,
+      status: 'success',
+      statusCode: 200,
+      rejectionReason: null,
+      requestPath,
+      requestMethod: request.method,
+    });
+
     return jsonResponse(200, { token, wsUrl });
   } catch {
+    await writeRequestLog(adminSupabase, {
+      userId: user.id,
+      peerUserId: null,
+      roomId: null,
+      requesterIp,
+      status: 'error',
+      statusCode: 500,
+      rejectionReason: 'unexpected_error',
+      requestPath,
+      requestMethod: request.method,
+    });
+
     return jsonResponse(500, { error: 'LiveKit token olusturulamadi.' });
   }
 });

@@ -1,13 +1,28 @@
-import 'expo-dev-client';
-import { registerGlobals } from '@livekit/react-native';
 import 'react-native-gesture-handler';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { isLiveKitEnabled } from './src/config/features';
 import { logSafeError } from './src/lib/safeLogger';
 
-registerGlobals();
+let livekitGlobalsRegistered = false;
+
+function initializeOptionalNativeModules() {
+  if (!isLiveKitEnabled || livekitGlobalsRegistered) {
+    return;
+  }
+
+  try {
+    const { registerGlobals } = require('@livekit/react-native') as {
+      registerGlobals: () => void;
+    };
+    registerGlobals();
+    livekitGlobalsRegistered = true;
+  } catch (error) {
+    logSafeError('LiveKit globals init failed', error);
+  }
+}
 
 function FallbackApp() {
   return null;
@@ -54,6 +69,7 @@ function loadAppNavigator() {
 }
 
 export default function App() {
+  initializeOptionalNativeModules();
   const AppProvider = loadAppProvider();
   const AppNavigator = loadAppNavigator();
 

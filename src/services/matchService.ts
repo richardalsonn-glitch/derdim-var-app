@@ -138,6 +138,7 @@ export async function joinQueue(mode: MatchmakingMode): Promise<MatchServiceResu
     .single();
 
   if (error) {
+    console.error('[match] joinQueue failed:', error.message);
     return { data: null, error: { message: error.message } };
   }
 
@@ -174,6 +175,7 @@ export async function findMatch(): Promise<MatchServiceResult<MatchmakingState>>
   });
 
   if (error) {
+    console.error('[match] claim_matchmaking_pair failed:', error.message);
     return { data: null, error: { message: error.message } };
   }
 
@@ -329,6 +331,7 @@ export async function leaveQueue(): Promise<MatchServiceResult<true>> {
   const { error } = await supabase.from('matchmaking_queue').delete().eq('id', queueToRemove.id);
 
   if (error) {
+    console.error('[match] leaveQueue delete failed:', error.message);
     return { data: null, error: { message: error.message } };
   }
 

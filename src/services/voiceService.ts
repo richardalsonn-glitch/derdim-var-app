@@ -1,6 +1,4 @@
-import { AudioSession, AndroidAudioTypePresets } from '@livekit/react-native';
-import { Room, RoomEvent, Track } from 'livekit-client';
-
+import { isLiveKitEnabled } from '../config/features';
 import { getSession } from './authService';
 
 type VoiceServiceError = {
@@ -22,8 +20,52 @@ type VoiceRoomState = {
   speakerEnabled: boolean;
 };
 
-let activeRoom: Room | null = null;
+type LiveKitAudioSessionModule = {
+  getAudioOutputs: () => Promise<string[]>;
+  selectAudioOutput: (output: string) => Promise<void>;
+  configureAudio: (config: Record<string, unknown>) => Promise<void>;
+  startAudioSession: () => Promise<void>;
+  stopAudioSession: () => Promise<void>;
+};
+
+type LiveKitModules = {
+  AudioSession: LiveKitAudioSessionModule;
+  AndroidAudioTypePresets: {
+    communication: unknown;
+  };
+  Room: new (options: Record<string, unknown>) => LiveKitRoomInstance;
+  RoomEvent: {
+    Disconnected: string;
+    TrackSubscribed: string;
+  };
+  Track: {
+    Kind: {
+      Audio: string;
+    };
+  };
+};
+
+type LiveKitTrack = {
+  kind?: string;
+};
+
+type LiveKitRoomInstance = {
+  on: (event: string, handler: (...args: unknown[]) => void) => void;
+  connect: (wsUrl: string, token: string, options: Record<string, unknown>) => Promise<void>;
+  disconnect: () => void;
+  removeAllListeners: () => void;
+  localParticipant: {
+    isMicrophoneEnabled: boolean;
+    setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
+  };
+};
+
+let livekitModulesCache: LiveKitModules | null = null;
+let activeRoom: LiveKitRoomInstance | null = null;
 let activeSpeakerEnabled = true;
+let mockLiveKitLogged = false;
+let mockRoomId: string | null = null;
+let mockMicEnabled = true;
 
 function getFunctionUrl() {
   const explicitEndpoint = process.env.EXPO_PUBLIC_LIVEKIT_TOKEN_ENDPOINT?.trim();
@@ -40,8 +82,73 @@ function getLivekitUrl() {
   return process.env.EXPO_PUBLIC_LIVEKIT_URL?.trim() ?? '';
 }
 
+function getMockRoomId(peerUserId: string) {
+  const normalizedPeerUserId = peerUserId.trim() || 'mock-peer';
+  return `mock-room-${normalizedPeerUserId}`;
+}
+
+function logMockMode() {
+  if (mockLiveKitLogged) {
+    return;
+  }
+
+  console.info('LiveKit disabled - using mock call');
+  mockLiveKitLogged = true;
+}
+
+async function getLiveKitModules(): Promise<LiveKitModules | null> {
+  if (!isLiveKitEnabled) {
+    return null;
+  }
+
+  if (livekitModulesCache) {
+    return livekitModulesCache;
+  }
+
+  const livekitReactNativeModule = require('@livekit/react-native') as {
+    AudioSession: LiveKitAudioSessionModule;
+    AndroidAudioTypePresets: {
+      communication: unknown;
+    };
+  };
+  const livekitClientModule = require('livekit-client') as {
+    Room: new (options: Record<string, unknown>) => LiveKitRoomInstance;
+    RoomEvent: {
+      Disconnected: string;
+      TrackSubscribed: string;
+    };
+    Track: {
+      Kind: {
+        Audio: string;
+      };
+    };
+  };
+
+  livekitModulesCache = {
+    AudioSession: livekitReactNativeModule.AudioSession,
+    AndroidAudioTypePresets: livekitReactNativeModule.AndroidAudioTypePresets,
+    Room: livekitClientModule.Room,
+    RoomEvent: livekitClientModule.RoomEvent,
+    Track: livekitClientModule.Track,
+  };
+
+  return livekitModulesCache;
+}
+
 async function selectAudioOutput(enableSpeaker: boolean) {
-  const outputs = await AudioSession.getAudioOutputs();
+  if (!isLiveKitEnabled) {
+    activeSpeakerEnabled = enableSpeaker;
+    return activeSpeakerEnabled;
+  }
+
+  const modules = await getLiveKitModules();
+
+  if (!modules) {
+    activeSpeakerEnabled = enableSpeaker;
+    return activeSpeakerEnabled;
+  }
+
+  const outputs = await modules.AudioSession.getAudioOutputs();
 
   if (outputs.length === 0) {
     return enableSpeaker;
@@ -59,12 +166,16 @@ async function selectAudioOutput(enableSpeaker: boolean) {
         ? 'default'
         : outputs[0];
 
-  await AudioSession.selectAudioOutput(preferredOutput);
+  await modules.AudioSession.selectAudioOutput(preferredOutput);
   activeSpeakerEnabled = enableSpeaker;
   return activeSpeakerEnabled;
 }
 
 function getActiveMuteState() {
+  if (!isLiveKitEnabled) {
+    return !mockMicEnabled;
+  }
+
   return !(activeRoom?.localParticipant.isMicrophoneEnabled ?? false);
 }
 
@@ -98,6 +209,12 @@ async function buildAuthHeaders(): Promise<VoiceServiceResult<Record<string, str
 }
 
 async function releaseTokenSession() {
+  if (!isLiveKitEnabled) {
+    mockRoomId = null;
+    mockMicEnabled = true;
+    return;
+  }
+
   const endpoint = getFunctionUrl();
 
   if (!endpoint) {
@@ -123,6 +240,17 @@ async function releaseTokenSession() {
 export async function createToken(
   peerUserId: string,
 ): Promise<VoiceServiceResult<CreateTokenPayload>> {
+  if (!isLiveKitEnabled) {
+    logMockMode();
+    return {
+      data: {
+        token: `mock-token-${peerUserId.trim() || 'peer'}`,
+        wsUrl: 'mock://livekit-disabled',
+      },
+      error: null,
+    };
+  }
+
   const endpoint = getFunctionUrl();
   const wsUrl = getLivekitUrl();
 
@@ -189,6 +317,21 @@ export async function createToken(
 export async function joinRoom(
   peerUserId: string,
 ): Promise<VoiceServiceResult<VoiceRoomState>> {
+  if (!isLiveKitEnabled) {
+    logMockMode();
+    mockRoomId = getMockRoomId(peerUserId);
+    mockMicEnabled = true;
+    activeSpeakerEnabled = true;
+
+    return {
+      data: {
+        muted: false,
+        speakerEnabled: true,
+      },
+      error: null,
+    };
+  }
+
   const tokenResult = await createToken(peerUserId);
 
   if (tokenResult.error || !tokenResult.data) {
@@ -196,28 +339,39 @@ export async function joinRoom(
   }
 
   try {
+    const modules = await getLiveKitModules();
+
+    if (!modules) {
+      return {
+        data: null,
+        error: { message: 'LiveKit modulleri yuklenemedi.' },
+      };
+    }
+
     await leaveRoom();
-    await AudioSession.configureAudio({
+    await modules.AudioSession.configureAudio({
       android: {
         preferredOutputList: ['speaker', 'earpiece', 'headset', 'bluetooth'],
-        audioTypeOptions: AndroidAudioTypePresets.communication,
+        audioTypeOptions: modules.AndroidAudioTypePresets.communication,
       },
       ios: {
         defaultOutput: 'speaker',
       },
     });
-    await AudioSession.startAudioSession();
+    await modules.AudioSession.startAudioSession();
 
-    const room = new Room({
+    const room = new modules.Room({
       adaptiveStream: true,
       dynacast: true,
     });
 
-    room.on(RoomEvent.Disconnected, () => {
+    room.on(modules.RoomEvent.Disconnected, () => {
       activeRoom = null;
     });
-    room.on(RoomEvent.TrackSubscribed, (track) => {
-      if (track.kind === Track.Kind.Audio) {
+    room.on(modules.RoomEvent.TrackSubscribed, (track: unknown) => {
+      const nextTrack = track as LiveKitTrack;
+
+      if (nextTrack.kind === modules.Track.Kind.Audio) {
         activeSpeakerEnabled = true;
       }
     });
@@ -247,6 +401,15 @@ export async function joinRoom(
 
 export async function leaveRoom(): Promise<VoiceServiceResult<true>> {
   try {
+    if (!isLiveKitEnabled) {
+      mockRoomId = null;
+      mockMicEnabled = true;
+      activeSpeakerEnabled = true;
+      return { data: true, error: null };
+    }
+
+    const modules = await getLiveKitModules();
+
     if (activeRoom) {
       try {
         await activeRoom.localParticipant.setMicrophoneEnabled(false);
@@ -259,7 +422,10 @@ export async function leaveRoom(): Promise<VoiceServiceResult<true>> {
       activeRoom = null;
     }
 
-    await AudioSession.stopAudioSession();
+    if (modules) {
+      await modules.AudioSession.stopAudioSession();
+    }
+
     await releaseTokenSession();
 
     return { data: true, error: null };
@@ -272,6 +438,17 @@ export async function leaveRoom(): Promise<VoiceServiceResult<true>> {
 }
 
 export async function toggleMute(): Promise<VoiceServiceResult<VoiceRoomState>> {
+  if (!isLiveKitEnabled) {
+    mockMicEnabled = !mockMicEnabled;
+    return {
+      data: {
+        muted: !mockMicEnabled,
+        speakerEnabled: activeSpeakerEnabled,
+      },
+      error: null,
+    };
+  }
+
   if (!activeRoom) {
     return { data: null, error: { message: 'Aktif sesli gorusme baglantisi yok.' } };
   }
