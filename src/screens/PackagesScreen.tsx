@@ -17,146 +17,170 @@ const planIcons = {
   trophy: 'trophy',
 } as const;
 
+const compactFeatures: Record<string, string[]> = {
+  free: ['30 sn görüşme', 'Standart eşleşme', 'Temel profil'],
+  plus: ['1 dk görüşme', '100 mesaj / ay', '10 arkadaş hakkı'],
+  vip: ['3 dk görüşme', 'Sınırsız mesaj', 'Öncelikli eşleşme'],
+};
+
 export function PackagesScreen({ navigation }: AppScreenProps<'Packages'>) {
   const { profile, setPlan } = useAppState();
 
   return (
-    <PremiumScreen>
-      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Ücretsiz, Plus ve VIP farklarını net gör" title="Paketler" />
+    <PremiumScreen contentStyle={styles.content}>
+      <ScreenHeader onBack={() => navigation.goBack()} subtitle="Planları kısa ve net karşılaştır" title="Paketler" />
 
-      {plans.map((plan) => {
-        const active = profile.plan === plan.id;
-        const vipCard = plan.id === 'vip';
+      <View style={styles.planStack}>
+        {plans.map((plan) => {
+          const active = profile.plan === plan.id;
+          const vipCard = plan.id === 'vip';
+          const features = compactFeatures[plan.id] ?? plan.features.slice(0, 3);
 
-        return (
-          <LinearGradient colors={plan.accent} key={plan.id} style={[styles.wrap, vipCard && styles.vipWrap]}>
-            <View style={styles.inner}>
-              <View style={styles.topRow}>
-                <View style={styles.heading}>
-                  <View style={styles.badgeRow}>
-                    <Ionicons color={vipCard ? colors.goldSoft : colors.cyan} name={planIcons[plan.icon]} size={18} />
-                    <Text style={styles.badgeLabel}>{plan.badge}</Text>
+          return (
+            <LinearGradient colors={plan.accent} key={plan.id} style={[styles.wrap, vipCard && styles.vipWrap]}>
+              <View style={styles.inner}>
+                <View style={styles.topRow}>
+                  <View style={styles.heading}>
+                    <View style={styles.badgeRow}>
+                      <Ionicons color={vipCard ? colors.goldSoft : colors.cyan} name={planIcons[plan.icon]} size={15} />
+                      <Text style={styles.badgeLabel}>{plan.badge}</Text>
+                      {active ? <Text style={styles.activePill}>Aktif plan</Text> : null}
+                    </View>
+                    <Text style={styles.name}>{plan.name}</Text>
+                    <Text numberOfLines={1} style={styles.description}>{plan.description}</Text>
                   </View>
-                  <Text style={styles.name}>{plan.name}</Text>
-                  <Text style={styles.description}>{plan.description}</Text>
-                </View>
-                <View style={styles.priceWrap}>
                   <Text style={styles.price}>{plan.price}</Text>
-                  {active ? <Text style={styles.activeLabel}>Aktif plan</Text> : null}
                 </View>
-              </View>
 
-              <View style={styles.featureList}>
-                {plan.features.map((feature) => (
-                  <View key={feature} style={styles.featureRow}>
-                    <Ionicons color={vipCard ? colors.goldSoft : colors.cyan} name="checkmark-circle" size={16} />
-                    <Text style={styles.featureText}>{feature}</Text>
-                  </View>
-                ))}
-              </View>
+                <View style={styles.featureList}>
+                  {features.map((feature) => (
+                    <View key={feature} style={styles.featureRow}>
+                      <Ionicons color={vipCard ? colors.goldSoft : colors.cyan} name="checkmark-circle" size={14} />
+                      <Text numberOfLines={1} style={styles.featureText}>{feature}</Text>
+                    </View>
+                  ))}
+                </View>
 
-              <GradientButton
-                onPress={() => void setPlan(plan.id)}
-                title={active ? 'Aktif planın' : `${plan.name} planını seç`}
-                variant={vipCard ? 'gold' : plan.id === 'plus' ? 'secondary' : 'ghost'}
-              />
-            </View>
-          </LinearGradient>
-        );
-      })}
+                <GradientButton
+                  compact
+                  disabled={active}
+                  onPress={() => void setPlan(plan.id)}
+                  title={active ? 'Planın aktif' : `${plan.name} seç`}
+                  variant={vipCard ? 'gold' : plan.id === 'plus' ? 'secondary' : 'ghost'}
+                />
+              </View>
+            </LinearGradient>
+          );
+        })}
+      </View>
 
       <GlassCard style={styles.noteCard}>
         <Text style={styles.noteTitle}>Konuşma süreleri</Text>
-        <Text style={styles.noteText}>Free 00:30 • Plus 01:00 • VIP 03:00. Hediye sonrası Plus/Free +1 dk, VIP +2 dk kazanır.</Text>
+        <Text style={styles.noteText}>Ücretsiz 00:30 • Plus 01:00 • VIP 03:00. Hediye sonrası ek süre kazanılabilir.</Text>
       </GlassCard>
     </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  content: {
+    gap: spacing.sm,
+    paddingBottom: 80,
+  },
+  planStack: {
+    gap: spacing.sm,
+  },
   wrap: {
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     padding: 1,
   },
   vipWrap: {
     shadowColor: colors.gold,
-    shadowOpacity: 0.38,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
   inner: {
-    borderRadius: radius.xl - 1,
+    borderRadius: radius.lg - 1,
     backgroundColor: 'rgba(7, 10, 28, 0.92)',
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   heading: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
   },
   badgeLabel: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  name: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  description: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  priceWrap: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  price: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
-  activeLabel: {
-    color: colors.goldSoft,
     fontSize: 12,
     fontWeight: '700',
   },
+  activePill: {
+    color: colors.goldSoft,
+    fontSize: 11,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(244,180,94,0.12)',
+    overflow: 'hidden',
+  },
+  name: {
+    color: colors.text,
+    fontSize: 23,
+    fontWeight: '900',
+  },
+  description: {
+    color: colors.muted,
+    fontSize: 12,
+  },
+  price: {
+    maxWidth: 112,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
   featureList: {
-    gap: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
   },
   featureRow: {
+    width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
   },
   featureText: {
     flex: 1,
     color: colors.text,
-    lineHeight: 20,
+    fontSize: 12,
   },
   noteCard: {
-    gap: 6,
+    gap: 4,
+    paddingVertical: spacing.sm,
   },
   noteTitle: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   noteText: {
     color: colors.muted,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

@@ -6,7 +6,7 @@ import { GlassCard } from '../components/GlassCard';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { colors, spacing } from '../constants/theme';
+import { colors, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { deleteCurrentAccount, freezeCurrentAccount } from '../services/accountService';
@@ -22,19 +22,19 @@ type InfoItem = {
 const legalItems: InfoItem[] = [
   {
     title: 'Gizlilik Politikası',
-    body: 'DerdimVar terapi hizmeti sunmaz. Uygulama anonim sosyal destek ve sesli görüşme alanıdır. Kullanıcı hesabı, profil bilgileri, mesajlar, arkadaşlık verileri, hediye kayıtları ve teknik loglar işlenebilir. Mikrofon sadece sesli görüşme için kullanılır. Veriler hizmeti sunmak, güvenliği sağlamak ve kötüye kullanımı önlemek için işlenir. Kullanıcı hesabını silebilir.',
+    body: 'DerdimVar terapi hizmeti sunmaz. Uygulama anonim sosyal destek ve sesli görüşme alanıdır. Kullanıcı hesabı, profil bilgileri, mesajlar, arkadaşlık verileri, hediye kayıtları ve teknik loglar işlenebilir. Mikrofon sadece sesli görüşme için kullanılır. Kullanıcı hesabını silebilir.',
   },
   {
     title: 'Kullanım Şartları',
-    body: 'Kullanıcılar saygılı davranmalıdır. Taciz, tehdit, nefret söylemi, cinsel içerik, dolandırıcılık ve yasa dışı kullanım yasaktır. DerdimVar profesyonel terapi, tıbbi destek veya acil yardım hizmeti değildir. Acil durumda 112 veya profesyonel destek alınmalıdır.',
+    body: 'Taciz, tehdit, nefret söylemi, cinsel içerik, dolandırıcılık ve yasa dışı kullanım yasaktır. DerdimVar profesyonel terapi, tıbbi destek veya acil yardım hizmeti değildir. Acil durumda 112 veya profesyonel destek alınmalıdır.',
   },
   {
     title: 'Topluluk Kuralları',
-    body: 'Anonimlik kötüye kullanım hakkı vermez. Karşı tarafı rahatsız etmek yasaktır. Şikayet ve engelleme mekanizması kullanılabilir. Güvenli konuşma ortamı korunmalıdır.',
+    body: 'Anonimlik kötüye kullanım hakkı vermez. Karşı tarafı rahatsız etmek yasaktır. Şikayet ve engelleme mekanizması kullanılabilir.',
   },
   {
     title: 'Veri Silme Politikası',
-    body: 'Hesabını silen kullanıcının profil, oturum, arkadaşlık, mesaj ve uygulama içi verileri silinir veya anonimleştirilir. Yasal/güvenlik gerekçesiyle tutulması gereken kayıtlar sınırlı süre saklanabilir. Hesabı dondurma, hesap silme yerine geçmez.',
+    body: 'Hesabını silen kullanıcının profil, arkadaşlık, mesaj ve uygulama içi verileri silinir veya anonimleştirilir. Güvenlik gerekçesiyle tutulması gereken kayıtlar sınırlı süre saklanabilir.',
   },
   {
     title: 'Acil Durum Uyarısı',
@@ -43,16 +43,14 @@ const legalItems: InfoItem[] = [
   },
 ];
 
-const supportItems: InfoItem[] = [
-  {
-    title: 'Şikayet Et / Bize Ulaş',
-    body: 'Kötüye kullanım, taciz, tehdit veya güvenlik riski görürsen bu kayıt moderasyon kuyruğuna alınır. Şu anda destek akışı güvenli stub olarak çalışır.',
-  },
-  {
-    title: 'Güvenlik Notu',
-    body: 'Kişisel bilgi, adres, finansal bilgi veya şifre paylaşma. Acil risklerde uygulama yerine 112 ve profesyonel destek kanallarını kullan.',
-  },
-];
+const supportTypes = [
+  { label: 'Şikayet', value: 'report' },
+  { label: 'Güvenlik', value: 'safety' },
+  { label: 'Taciz', value: 'report' },
+  { label: 'Teknik Sorun', value: 'support' },
+  { label: 'Hesap Sorunu', value: 'support' },
+  { label: 'Diğer', value: 'support' },
+] as const;
 
 export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
   const { updateProfile } = useAppState();
@@ -61,6 +59,8 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [supportVisible, setSupportVisible] = useState(false);
+  const [supportTypeIndex, setSupportTypeIndex] = useState(0);
+  const [supportSubject, setSupportSubject] = useState('');
   const [supportMessage, setSupportMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -92,21 +92,29 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
   }
 
   async function handleSupportSubmit() {
+    const selectedType = supportTypes[supportTypeIndex];
     setPending(true);
     const result = await submitSupportReport({
-      type: 'support',
+      type: selectedType.value,
+      subject: `${selectedType.label}: ${supportSubject}`,
       message: supportMessage,
     });
     setPending(false);
 
     if (result.error) {
-      setErrorMessage(getFriendlyErrorMessage(result.error, 'Talebin gönderilemedi. Lütfen tekrar deneyin.'));
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Talep gönderilemedi. Lütfen tekrar deneyin.'));
       return;
     }
 
     setSupportVisible(false);
+    setSupportSubject('');
     setSupportMessage('');
-    setSuccessMessage('Talebin alındı. En kısa sürede inceleyeceğiz.');
+    setSuccessMessage('Talebin alındı. En kısa sürede incelenecek.');
+  }
+
+  function openSupportForm() {
+    setErrorMessage('');
+    setSupportVisible(true);
   }
 
   function renderItem(item: InfoItem) {
@@ -138,7 +146,7 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
         <Pressable onPress={() => setConfirmAction('freeze')} style={styles.row}>
           <View style={styles.rowCopy}>
             <Text style={styles.rowTitle}>Hesabımı Dondur</Text>
-            <Text numberOfLines={1} style={styles.rowText}>Hesabını geçici olarak kapatır. Eşleşme ve online görünürlük durur.</Text>
+            <Text numberOfLines={1} style={styles.rowText}>Eşleşme ve online görünürlük geçici olarak durur.</Text>
           </View>
           <Ionicons color={colors.muted} name="pause-circle" size={18} />
         </Pressable>
@@ -153,13 +161,19 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
 
       <GlassCard style={styles.card}>
         <Text style={styles.sectionTitle}>Destek</Text>
-        {supportItems.map(renderItem)}
-        <Pressable onPress={() => setSupportVisible(true)} style={styles.row}>
+        <Pressable onPress={openSupportForm} style={styles.row}>
           <View style={styles.rowCopy}>
-            <Text style={styles.rowTitle}>Talep Gönder</Text>
-            <Text numberOfLines={1} style={styles.rowText}>Güvenlik, taciz, teknik sorun veya hesap konularını bize ilet.</Text>
+            <Text style={styles.rowTitle}>Şikayet Et / Bize Ulaş</Text>
+            <Text numberOfLines={1} style={styles.rowText}>Şikayet, güvenlik, taciz, teknik sorun veya hesap talebi oluştur.</Text>
           </View>
           <Ionicons color={colors.cyan} name="send" size={18} />
+        </Pressable>
+        <Pressable onPress={() => setSelectedItem({ title: 'Güvenlik Notu', body: 'Kişisel bilgi, adres, finansal bilgi veya şifre paylaşma. Acil risklerde 112 ve profesyonel destek kanallarını kullan.' })} style={styles.row}>
+          <View style={styles.rowCopy}>
+            <Text style={styles.rowTitle}>Güvenlik Notu</Text>
+            <Text numberOfLines={1} style={styles.rowText}>Kişisel bilgi paylaşma; acil durumda 112’yi ara.</Text>
+          </View>
+          <Ionicons color={colors.gold} name="shield-checkmark" size={18} />
         </Pressable>
       </GlassCard>
 
@@ -179,10 +193,28 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
         title="Şikayet Et / Bize Ulaş"
         visible={supportVisible}
       >
+        <View style={styles.typeGrid}>
+          {supportTypes.map((type, index) => (
+            <Pressable
+              key={type.label}
+              onPress={() => setSupportTypeIndex(index)}
+              style={[styles.typeChip, supportTypeIndex === index && styles.typeChipActive]}
+            >
+              <Text style={[styles.typeText, supportTypeIndex === index && styles.typeTextActive]}>{type.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          onChangeText={setSupportSubject}
+          placeholder="Konu / başlık"
+          placeholderTextColor={colors.dim}
+          style={styles.input}
+          value={supportSubject}
+        />
         <TextInput
           multiline
           onChangeText={setSupportMessage}
-          placeholder="Konu ve açıklama yaz..."
+          placeholder="Açıklama / mesaj"
           placeholderTextColor={colors.dim}
           style={styles.supportInput}
           value={supportMessage}
@@ -227,7 +259,8 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: 96,
   },
   card: {
     gap: spacing.sm,
@@ -256,15 +289,42 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 3,
   },
-  danger: {
-    color: colors.danger,
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  error: {
-    color: colors.danger,
-    fontWeight: '700',
+  typeChip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  typeChipActive: {
+    borderColor: colors.cyan,
+    backgroundColor: 'rgba(69,224,255,0.12)',
+  },
+  typeText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  typeTextActive: {
+    color: colors.text,
+  },
+  input: {
+    minHeight: 46,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSoft,
+    color: colors.text,
+    paddingHorizontal: spacing.md,
   },
   supportInput: {
-    minHeight: 110,
+    minHeight: 118,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
@@ -272,5 +332,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: spacing.md,
     textAlignVertical: 'top',
+  },
+  danger: {
+    color: colors.danger,
+  },
+  error: {
+    color: colors.danger,
+    fontWeight: '700',
   },
 });

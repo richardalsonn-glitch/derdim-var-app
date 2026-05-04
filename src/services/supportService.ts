@@ -4,6 +4,7 @@ import { getCurrentUser } from './authService';
 
 type SupportReportInput = {
   type: 'report' | 'support' | 'safety';
+  subject?: string;
   message: string;
   reportedUserId?: string | null;
 };
@@ -14,10 +15,11 @@ type ServiceResult<T> = {
 };
 
 export async function submitSupportReport(input: SupportReportInput): Promise<ServiceResult<true>> {
+  const trimmedSubject = input.subject?.trim() ?? '';
   const trimmedMessage = input.message.trim();
 
-  if (!trimmedMessage) {
-    return { data: null, error: { message: 'Lütfen kısa bir açıklama yaz.' } };
+  if (!trimmedSubject || !trimmedMessage) {
+    return { data: null, error: { message: 'Lütfen konu ve açıklama alanlarını doldur.' } };
   }
 
   if (!isSupabaseConfigured) {
@@ -34,12 +36,12 @@ export async function submitSupportReport(input: SupportReportInput): Promise<Se
     reporter_id: userResult.data.id,
     reported_user_id: input.reportedUserId ?? null,
     type: input.type,
-    message: trimmedMessage,
+    message: `${trimmedSubject}\n\n${trimmedMessage}`,
   });
 
   if (error) {
     console.error('[support] submit report failed:', error.message);
-    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Talebin gönderilemedi. Lütfen tekrar deneyin.') } };
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Talep gönderilemedi. Lütfen tekrar deneyin.') } };
   }
 
   return { data: true, error: null };
