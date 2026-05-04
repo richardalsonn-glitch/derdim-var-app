@@ -23,6 +23,7 @@ import { signOut } from '../services/authService';
 import { joinQueue, leaveQueue, listenForMatch } from '../services/matchService';
 import { requestMicrophonePermission } from '../services/permissionsService';
 import { MatchRole, MatchmakingMode, UiTheme } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 const AUTO_CALL_SECONDS = 45;
 
@@ -57,7 +58,7 @@ const drawerItems: DrawerItem[] = [
   { key: 'profile', label: 'Profilim', icon: 'person' },
   { key: 'chats', label: 'Sohbetler', icon: 'chatbubbles' },
   { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
-  { key: 'notifications', label: 'Bildirimler', icon: 'notifications' },
+  { key: 'notifications', label: 'Ayarlar', icon: 'settings' },
   { key: 'packages', label: 'Paketler', icon: 'diamond' },
   { key: 'badges', label: 'Rozet Sistemi', icon: 'shield-half' },
   { key: 'settings', label: 'Ayarlar', icon: 'settings' },
@@ -69,7 +70,7 @@ const bottomTabs: BottomTabItem[] = [
   { key: 'chats', label: 'Sohbetler', icon: 'chatbox-ellipses' },
   { key: 'gifts', label: 'Hediyeler', icon: 'gift' },
   { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
-  { key: 'notifications', label: 'Bildirimler', icon: 'notifications' },
+  { key: 'notifications', label: 'Ayarlar', icon: 'settings' },
 ];
 
 function formatAutoCall(seconds: number) {
@@ -78,6 +79,18 @@ function formatAutoCall(seconds: number) {
 
 function getMatchmakingMode(role: MatchRole): MatchmakingMode {
   return role === 'derdim-var' ? 'derdim' : 'derman';
+}
+
+function getPlanDisplayName(plan: string) {
+  if (plan === 'vip') {
+    return 'VIP';
+  }
+
+  if (plan === 'plus') {
+    return 'Plus';
+  }
+
+  return 'Ücretsiz';
 }
 
 function getPalette(theme: UiTheme): HomePalette {
@@ -337,7 +350,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
 
     if (joinResult.error || !joinResult.data) {
       matchmakingPhaseRef.current = 'idle';
-      showMatchError(joinResult.error?.message ?? 'Eslesme kuyrugu baslatilamadi.');
+      showMatchError(getFriendlyErrorMessage(joinResult.error, 'Eşleşme başlatılamadı. Lütfen tekrar deneyin.'));
       return;
     }
 
@@ -362,7 +375,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     if (listenResult.error || !listenResult.data) {
       matchmakingPhaseRef.current = 'idle';
       await leaveQueue();
-      showMatchError(listenResult.error?.message ?? 'Gercek zamanli eslesme dinleyicisi baslatilamadi.');
+      showMatchError(getFriendlyErrorMessage(listenResult.error, 'Eşleşme başlatılamadı. Lütfen tekrar deneyin.'));
       return;
     }
 
@@ -392,6 +405,12 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           setPermissionModalVisible(true);
           return;
         }
+      }
+
+      if (!isLiveKitEnabled) {
+        setActiveRole(role);
+        openMatchedVoiceCall();
+        return;
       }
 
       await stopMatchmaking();
@@ -694,7 +713,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         onClose={() => setDrawerVisible(false)}
         onSelect={handleDrawerSelect}
         palette={palette}
-        planLabel={`${profile.plan.toUpperCase()} • Level ${userLevel}`}
+        planLabel={`${getPlanDisplayName(profile.plan)} • Level ${userLevel}`}
         username={profile.username}
         visible={drawerVisible}
       />

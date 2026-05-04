@@ -3,6 +3,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { defaultProfile, getAvatarById, gifts, receivedGifts } from '../data/mockData';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { FriendSummary, GiftItem, MembershipPlan } from '../types';
+import { getFriendlyErrorMessage, isMissingTableError } from '../utils/errorMessages';
 import { getCurrentUser } from './authService';
 import { sendMessageNotification } from './notificationService';
 
@@ -108,7 +109,11 @@ export async function listFriends(): Promise<ServiceResult<FriendListData>> {
 
   if (error) {
     console.error('[social] listFriends failed:', error.message);
-    return { data: null, error: { message: 'Arkadas listesi yuklenemedi.' } };
+    if (isMissingTableError(error)) {
+      return { data: { friends: [], incomingRequests: [], outgoingRequests: [] }, error: null };
+    }
+
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Arkadaş listesi yüklenemedi.') } };
   }
 
   const rows = data ?? [];
@@ -150,7 +155,7 @@ export async function updateFriendship(requestId: string, status: 'accepted' | '
 
   if (error) {
     console.error('[social] updateFriendship failed:', error.message);
-    return { data: null, error: { message: 'Arkadaslik istegi guncellenemedi.' } };
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Arkadaşlık isteği güncellenemedi.') } };
   }
 
   return { data: true, error: null };
@@ -186,7 +191,7 @@ export async function createOrGetThread(peerUserId: string): Promise<ServiceResu
 
   if (existingResult.error) {
     console.error('[social] createOrGetThread lookup failed:', existingResult.error.message);
-    return { data: null, error: { message: 'Sohbet baslatilamadi.' } };
+    return { data: null, error: { message: getFriendlyErrorMessage(existingResult.error, 'Sohbet başlatılamadı.') } };
   }
 
   const threadResult = existingResult.data
@@ -199,7 +204,7 @@ export async function createOrGetThread(peerUserId: string): Promise<ServiceResu
 
   if (threadResult.error || !threadResult.data) {
     console.error('[social] createOrGetThread failed:', threadResult.error?.message ?? 'empty result');
-    return { data: null, error: { message: 'Sohbet baslatilamadi.' } };
+    return { data: null, error: { message: getFriendlyErrorMessage(threadResult.error, 'Sohbet başlatılamadı.') } };
   }
 
   const data = threadResult.data;
@@ -243,7 +248,11 @@ export async function listThreads(): Promise<ServiceResult<ChatThreadSummary[]>>
 
   if (error) {
     console.error('[social] listThreads failed:', error.message);
-    return { data: null, error: { message: 'Sohbetler yuklenemedi.' } };
+    if (isMissingTableError(error)) {
+      return { data: [], error: null };
+    }
+
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Sohbetler yüklenemedi.') } };
   }
 
   const rows = data ?? [];
@@ -291,7 +300,11 @@ export async function listMessages(threadId: string): Promise<ServiceResult<Chat
 
   if (error) {
     console.error('[social] listMessages failed:', error.message);
-    return { data: null, error: { message: 'Mesajlar yuklenemedi.' } };
+    if (isMissingTableError(error)) {
+      return { data: [], error: null };
+    }
+
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Mesajlar yüklenemedi.') } };
   }
 
   return {
@@ -352,7 +365,7 @@ export async function sendMessage(thread: ChatThreadSummary, message: string): P
 
   if (error) {
     console.error('[social] sendMessage failed:', error.message);
-    return { data: null, error: { message: 'Mesaj gonderilemedi.' } };
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Mesaj gönderilemedi.') } };
   }
 
   await supabase
@@ -428,7 +441,11 @@ export async function listGiftHistory(): Promise<ServiceResult<GiftHistory>> {
 
   if (error) {
     console.error('[social] listGiftHistory failed:', error.message);
-    return { data: null, error: { message: 'Hediye gecmisi yuklenemedi.' } };
+    if (isMissingTableError(error)) {
+      return { data: { received: [], sent: [], popular: gifts.slice(0, 4) }, error: null };
+    }
+
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Hediye geçmişi yüklenemedi.') } };
   }
 
   const countByType = (rows: any[]) => rows.reduce<Record<string, number>>((acc, row) => {

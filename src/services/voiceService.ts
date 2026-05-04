@@ -1,5 +1,6 @@
 import { isLiveKitEnabled } from '../config/features';
 import { getSession } from './authService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 type VoiceServiceError = {
   message: string;
@@ -187,7 +188,7 @@ async function buildAuthHeaders(): Promise<VoiceServiceResult<Record<string, str
   if (sessionResult.error) {
     return {
       data: null,
-      error: { message: sessionResult.error.message },
+      error: { message: getFriendlyErrorMessage(sessionResult.error, 'Oturumun sona ermiş olabilir. Lütfen tekrar giriş yap.') },
     };
   }
 
@@ -309,7 +310,7 @@ export async function createToken(
   } catch (error) {
     return {
       data: null,
-      error: { message: error instanceof Error ? error.message : 'LiveKit token endpoint istegi basarisiz oldu.' },
+      error: { message: getFriendlyErrorMessage(error, 'Sesli görüşme başlatılamadı. Lütfen tekrar deneyin.') },
     };
   }
 }
@@ -394,7 +395,7 @@ export async function joinRoom(
     await leaveRoom();
     return {
       data: null,
-      error: { message: error instanceof Error ? error.message : 'LiveKit odasina baglanilamadi.' },
+      error: { message: getFriendlyErrorMessage(error, 'Sesli görüşme odasına bağlanılamadı. Lütfen tekrar deneyin.') },
     };
   }
 }
@@ -432,7 +433,7 @@ export async function leaveRoom(): Promise<VoiceServiceResult<true>> {
   } catch (error) {
     return {
       data: null,
-      error: { message: error instanceof Error ? error.message : 'LiveKit baglantisi kapatilamadi.' },
+      error: { message: getFriendlyErrorMessage(error, 'Sesli görüşme kapatılamadı. Lütfen tekrar deneyin.') },
     };
   }
 }
@@ -467,7 +468,7 @@ export async function toggleMute(): Promise<VoiceServiceResult<VoiceRoomState>> 
   } catch (error) {
     return {
       data: null,
-      error: { message: error instanceof Error ? error.message : 'Mikrofon durumu guncellenemedi.' },
+      error: { message: getFriendlyErrorMessage(error, 'Mikrofon durumu güncellenemedi.') },
     };
   }
 }
@@ -486,7 +487,7 @@ export async function toggleSpeaker(): Promise<VoiceServiceResult<VoiceRoomState
   } catch (error) {
     return {
       data: null,
-      error: { message: error instanceof Error ? error.message : 'Hoparlor durumu guncellenemedi.' },
+      error: { message: getFriendlyErrorMessage(error, 'Hoparlör durumu güncellenemedi.') },
     };
   }
 }

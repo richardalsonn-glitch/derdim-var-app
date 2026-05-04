@@ -10,6 +10,7 @@ import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { deleteCurrentAccount, freezeCurrentAccount } from '../services/accountService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 type InfoItem = {
   title: string;
@@ -65,7 +66,7 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
     setPending(false);
 
     if (result.error) {
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Hesap dondurulamadı. Lütfen tekrar deneyin.'));
       return;
     }
 
@@ -79,7 +80,7 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
     setPending(false);
 
     if (result.error) {
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Hesap silinemedi. Lütfen tekrar deneyin.'));
       return;
     }
 

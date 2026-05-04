@@ -11,6 +11,7 @@ import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { restoreAuthProfile, signInWithEmail } from '../services/authService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
   const { profile, updateProfile } = useAppState();
@@ -39,7 +40,7 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
 
     if (result.error) {
       setIsSubmitting(false);
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Giriş yapılamadı. Lütfen bilgilerini kontrol edip tekrar dene.'));
       setErrorVisible(true);
       return;
     }
@@ -48,7 +49,7 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
 
     if (restoredProfile.error) {
       setIsSubmitting(false);
-      setErrorMessage(restoredProfile.error.message);
+      setErrorMessage(getFriendlyErrorMessage(restoredProfile.error, 'Oturum bilgilerin alınamadı. Lütfen tekrar giriş yap.'));
       setErrorVisible(true);
       return;
     }

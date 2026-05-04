@@ -11,6 +11,7 @@ import { colors, spacing } from '../constants/theme';
 import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { createOrGetThread, FriendListData, listFriends, updateFriendship } from '../services/socialService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 type FriendItem = FriendListData['friends'][number];
 type RequestItem = FriendListData['incomingRequests'][number];
@@ -25,7 +26,7 @@ export function FriendsScreen({ navigation }: AppScreenProps<'Friends'>) {
     const result = await listFriends();
 
     if (result.error || !result.data) {
-      setErrorMessage(result.error?.message ?? 'Arkadaşlar yüklenemedi.');
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Arkadaşlar yüklenemedi.'));
     } else {
       setData(result.data);
       setErrorMessage('');
@@ -42,7 +43,7 @@ export function FriendsScreen({ navigation }: AppScreenProps<'Friends'>) {
     const result = await createOrGetThread(friendId);
 
     if (result.error || !result.data) {
-      setErrorMessage(result.error?.message ?? 'Sohbet açılamadı.');
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Sohbet açılamadı.'));
       return;
     }
 
@@ -53,7 +54,7 @@ export function FriendsScreen({ navigation }: AppScreenProps<'Friends'>) {
     const result = await updateFriendship(request.requestId, 'accepted');
 
     if (result.error) {
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Arkadaşlık isteği güncellenemedi.'));
       return;
     }
 
@@ -64,7 +65,7 @@ export function FriendsScreen({ navigation }: AppScreenProps<'Friends'>) {
     const result = await updateFriendship(request.requestId, 'blocked');
 
     if (result.error) {
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Arkadaşlık isteği güncellenemedi.'));
       return;
     }
 

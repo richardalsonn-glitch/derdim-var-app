@@ -11,6 +11,7 @@ import { useAppState } from '../data/AppContext';
 import { getSafeErrorMessage } from '../lib/safeLogger';
 import { AppScreenProps } from '../navigation/types';
 import { restoreAuthProfile, signInWithApple, signInWithGoogle } from '../services/authService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 const welcomeBg = require('../../assets/images/giris-ekrani2.png');
 
@@ -211,7 +212,7 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
         console.error(`[auth] ${provider} sign-in failed:`, result.error?.message ?? 'unknown error');
         openSocialError(
           provider === 'apple' ? 'Apple ile giris basarisiz' : 'Google ile giris basarisiz',
-          result.error?.message ?? 'Giris tamamlanamadi.',
+          getFriendlyErrorMessage(result.error, 'Giriş tamamlanamadı. Lütfen tekrar deneyin.'),
         );
         return;
       }

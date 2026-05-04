@@ -8,6 +8,7 @@ import { colors, spacing } from '../constants/theme';
 import { AppScreenProps } from '../navigation/types';
 import { GiftHistory, listGiftHistory } from '../services/socialService';
 import { GiftItem } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 function GiftRow({ item }: { item: GiftItem & { count?: number } }) {
   return (
@@ -55,7 +56,7 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
       }
 
       if (result.error || !result.data) {
-        setErrorMessage(result.error?.message ?? 'Hediye geçmişi yüklenemedi.');
+        setErrorMessage(getFriendlyErrorMessage(result.error, 'Hediye geçmişi yüklenemedi.'));
       } else {
         setHistory(result.data);
       }

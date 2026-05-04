@@ -9,6 +9,7 @@ import { defaultProfile } from '../data/mockData';
 import { getSafeErrorMessage, logSafeError } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { MembershipPlan } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -192,11 +193,7 @@ async function ensureProfileRecord(user: User, preferredName?: string): Promise<
 }
 
 function toAuthError(error: unknown, fallbackMessage: string): AuthServiceError {
-  if (error instanceof Error && error.message) {
-    return { message: error.message };
-  }
-
-  return { message: fallbackMessage };
+  return { message: getFriendlyErrorMessage(error, fallbackMessage) };
 }
 
 async function finalizeAuthSession(
@@ -221,7 +218,7 @@ async function finalizeAuthSession(
 
     return {
       data: error ? null : { user: data.user, session: data.session },
-      error: error ? { message: error.message } : null,
+      error: error ? { message: getFriendlyErrorMessage(error, 'Oturum başlatılamadı. Lütfen tekrar deneyin.') } : null,
     };
   }
 
@@ -230,7 +227,7 @@ async function finalizeAuthSession(
 
     return {
       data: error ? null : { user: data.user, session: data.session },
-      error: error ? { message: error.message } : null,
+      error: error ? { message: getFriendlyErrorMessage(error, 'Oturum başlatılamadı. Lütfen tekrar deneyin.') } : null,
     };
   }
 
@@ -271,7 +268,7 @@ export async function signUpWithEmail(
 
   return {
     data: error ? null : { user: data.user, session: data.session },
-    error: error ? { message: error.message } : null,
+    error: error ? { message: getFriendlyErrorMessage(error, 'Kayıt oluşturulamadı. Lütfen tekrar deneyin.') } : null,
   };
 }
 
@@ -290,7 +287,7 @@ export async function signInWithEmail(
 
   return {
     data: error ? null : { user: data.user, session: data.session },
-    error: error ? { message: error.message } : null,
+    error: error ? { message: getFriendlyErrorMessage(error, 'Giriş yapılamadı. Lütfen bilgilerini kontrol edip tekrar dene.') } : null,
   };
 }
 
@@ -303,7 +300,7 @@ export async function signOut(): Promise<AuthServiceResult<true>> {
   const { error } = await supabase.auth.signOut();
   return {
     data: error ? null : true,
-    error: error ? { message: error.message } : null,
+    error: error ? { message: getFriendlyErrorMessage(error, 'Çıkış yapılamadı. Lütfen tekrar deneyin.') } : null,
   };
 }
 
@@ -315,7 +312,7 @@ export async function getCurrentUser(): Promise<AuthServiceResult<User | null>> 
   const { data, error } = await supabase.auth.getUser();
   return {
     data: error ? null : data.user,
-    error: error ? { message: error.message } : null,
+    error: error ? { message: getFriendlyErrorMessage(error, 'Oturum bilgileri alınamadı. Lütfen tekrar giriş yap.') } : null,
   };
 }
 
@@ -327,7 +324,7 @@ export async function getSession(): Promise<AuthServiceResult<Session | null>> {
   const { data, error } = await supabase.auth.getSession();
   return {
     data: error ? null : data.session,
-    error: error ? { message: error.message } : null,
+    error: error ? { message: getFriendlyErrorMessage(error, 'Oturum bilgileri alınamadı. Lütfen tekrar giriş yap.') } : null,
   };
 }
 
@@ -404,7 +401,7 @@ export async function updateCurrentUserPlan(plan: MembershipPlan): Promise<AuthS
       .single();
 
     if (error) {
-      return { data: null, error: { message: error.message } };
+      return { data: null, error: { message: getFriendlyErrorMessage(error, 'Plan güncellenemedi.') } };
     }
 
     return {
@@ -488,7 +485,7 @@ export async function signInWithApple(): Promise<AuthServiceResult<AuthPayload>>
     });
 
     if (error) {
-      return { data: null, error: { message: error.message } };
+      return { data: null, error: { message: getFriendlyErrorMessage(error, 'Apple ile giriş başarısız oldu.') } };
     }
 
     const profile = data.user ? await ensureProfileRecord(data.user, fullName) : null;
@@ -531,7 +528,7 @@ export async function signInWithGoogle(): Promise<AuthServiceResult<AuthPayload>
     });
 
     if (error) {
-      return { data: null, error: { message: error.message } };
+      return { data: null, error: { message: getFriendlyErrorMessage(error, 'Google ile giriş başarısız oldu.') } };
     }
 
     if (!data?.url) {

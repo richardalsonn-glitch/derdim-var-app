@@ -4,6 +4,7 @@ import { defaultProfile } from '../data/mockData';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { getCurrentUser } from './authService';
 import { MatchParticipantProfile, MatchmakingMode, MatchmakingQueueRow, MatchmakingState } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 type MatchServiceError = {
   message: string;
@@ -89,7 +90,7 @@ async function getAuthenticatedUserId(): Promise<MatchServiceResult<string>> {
   const result = await getCurrentUser();
 
   if (result.error) {
-    return { data: null, error: { message: result.error.message } };
+    return { data: null, error: { message: getFriendlyErrorMessage(result.error, MATCH_START_ERROR_MESSAGE) } };
   }
 
   if (!result.data?.id) {
@@ -260,7 +261,7 @@ export async function findMatch(): Promise<MatchServiceResult<MatchmakingState>>
 
   if (error) {
     console.error('[match] claim_matchmaking_pair failed:', error.message);
-    return { data: null, error: { message: error.message } };
+    return { data: null, error: { message: getFriendlyErrorMessage(error, MATCH_START_ERROR_MESSAGE) } };
   }
 
   const nextQueue = Array.isArray(data) ? (data[0] as MatchmakingQueueRow | undefined) : undefined;

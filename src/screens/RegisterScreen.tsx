@@ -12,6 +12,7 @@ import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { signUpWithEmail } from '../services/authService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 export function RegisterScreen({ navigation }: AppScreenProps<'Register'>) {
   const { updateProfile } = useAppState();
@@ -41,7 +42,7 @@ export function RegisterScreen({ navigation }: AppScreenProps<'Register'>) {
 
     if (result.error) {
       setIsSubmitting(false);
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Kayıt oluşturulamadı. Lütfen tekrar deneyin.'));
       setErrorVisible(true);
       return;
     }

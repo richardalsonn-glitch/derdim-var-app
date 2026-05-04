@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import { getSession } from './authService';
 
 type ServiceResult<T> = {
@@ -74,7 +75,7 @@ export async function deleteCurrentAccount(): Promise<ServiceResult<true>> {
     if (!response.ok) {
       return {
         data: null,
-        error: { message: typeof payload?.error === 'string' ? payload.error : FRIENDLY_ACCOUNT_ERROR },
+        error: { message: getFriendlyErrorMessage(typeof payload?.error === 'string' ? payload.error : null, FRIENDLY_ACCOUNT_ERROR) },
       };
     }
 
@@ -82,6 +83,6 @@ export async function deleteCurrentAccount(): Promise<ServiceResult<true>> {
     return { data: true, error: null };
   } catch (error) {
     console.error('[account] delete failed:', error instanceof Error ? error.message : 'unknown error');
-    return { data: null, error: { message: FRIENDLY_ACCOUNT_ERROR } };
+    return { data: null, error: { message: getFriendlyErrorMessage(error, FRIENDLY_ACCOUNT_ERROR) } };
   }
 }

@@ -15,6 +15,7 @@ import { badges, getAvatarById, receivedGifts } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { deleteCurrentAccount, freezeCurrentAccount } from '../services/accountService';
 import { FriendRequestItem, MembershipPlan } from '../types';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 const USERNAME_CHANGE_WINDOW_DAYS = 7;
 
@@ -40,6 +41,18 @@ function getPlanBadge(plan: MembershipPlan) {
     color: colors.cyan,
     background: 'rgba(80, 143, 255, 0.16)',
   };
+}
+
+function getPlanDisplayName(plan: MembershipPlan) {
+  if (plan === 'vip') {
+    return 'VIP';
+  }
+
+  if (plan === 'plus') {
+    return 'Plus';
+  }
+
+  return 'Ücretsiz';
 }
 
 function FriendRequestRow({
@@ -124,7 +137,7 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
     const result = action === 'freeze' ? await freezeCurrentAccount() : await deleteCurrentAccount();
 
     if (result.error) {
-      setAccountError(result.error.message);
+      setAccountError(getFriendlyErrorMessage(result.error, 'Hesap işlemi tamamlanamadı. Lütfen tekrar deneyin.'));
       return;
     }
 
@@ -145,7 +158,7 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
         <Avatar avatar={avatar} size={84} />
         <View style={styles.heroCopy}>
           <Text style={styles.alias}>{profile.username}</Text>
-          <Text style={styles.packageLabel}>{profile.plan.toUpperCase()} plan aktif</Text>
+          <Text style={styles.packageLabel}>{getPlanDisplayName(profile.plan)} plan aktif</Text>
           <View style={styles.metaRow}>
             <View style={styles.metaPill}>
               <Text style={styles.metaText}>{profile.age} yaş</Text>
@@ -192,7 +205,7 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
           </View>
           <View style={styles.infoCell}>
             <Text style={styles.infoLabel}>Paket</Text>
-            <Text style={styles.infoValue}>{profile.plan.toUpperCase()}</Text>
+            <Text style={styles.infoValue}>{getPlanDisplayName(profile.plan)}</Text>
           </View>
           <View style={styles.infoCell}>
             <Text style={styles.infoLabel}>Kayıt tarihi</Text>

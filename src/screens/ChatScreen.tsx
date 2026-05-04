@@ -11,6 +11,7 @@ import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { ChatMessageItem, ChatThreadSummary, createOrGetThread, listMessages, listThreads, sendMessage, subscribeToMessages } from '../services/socialService';
 import { supabase } from '../lib/supabase';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 export function ChatScreen({ navigation, route }: AppScreenProps<'Chat'>) {
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
@@ -36,7 +37,7 @@ export function ChatScreen({ navigation, route }: AppScreenProps<'Chat'>) {
         }
 
         if (result.error || !result.data) {
-          setErrorMessage(result.error?.message ?? 'Sohbet acilamadi.');
+          setErrorMessage(getFriendlyErrorMessage(result.error, 'Sohbet açılamadı.'));
           setLoading(false);
           return;
         }
@@ -53,7 +54,7 @@ export function ChatScreen({ navigation, route }: AppScreenProps<'Chat'>) {
       }
 
       if (result.error || !result.data) {
-        setErrorMessage(result.error?.message ?? 'Sohbetler yuklenemedi.');
+        setErrorMessage(getFriendlyErrorMessage(result.error, 'Sohbetler yüklenemedi.'));
       } else {
         setThreads(result.data);
         const initialThread = route.params?.threadId ? result.data.find((thread) => thread.id === route.params?.threadId) : null;
@@ -81,7 +82,7 @@ export function ChatScreen({ navigation, route }: AppScreenProps<'Chat'>) {
       }
 
       if (result.error || !result.data) {
-        setErrorMessage(result.error?.message ?? 'Mesajlar yuklenemedi.');
+        setErrorMessage(getFriendlyErrorMessage(result.error, 'Mesajlar yüklenemedi.'));
       } else {
         setMessages(result.data);
       }
@@ -110,7 +111,7 @@ export function ChatScreen({ navigation, route }: AppScreenProps<'Chat'>) {
     const sentMessage = result.data;
 
     if (result.error || !sentMessage) {
-      setErrorMessage(result.error?.message ?? 'Mesaj gonderilemedi.');
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Mesaj gönderilemedi.'));
     } else {
       setMessages((current) => [...current, sentMessage]);
       setDraft('');

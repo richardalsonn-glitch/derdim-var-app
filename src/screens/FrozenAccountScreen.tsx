@@ -9,6 +9,7 @@ import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { reactivateCurrentAccount } from '../services/accountService';
 import { signOut } from '../services/authService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 export function FrozenAccountScreen({ navigation }: AppScreenProps<'FrozenAccount'>) {
   const { updateProfile } = useAppState();
@@ -24,7 +25,7 @@ export function FrozenAccountScreen({ navigation }: AppScreenProps<'FrozenAccoun
     const result = await reactivateCurrentAccount();
 
     if (result.error) {
-      setErrorMessage(result.error.message);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Hesap aktifleştirilemedi. Lütfen tekrar deneyin.'));
       setPending(false);
       return;
     }

@@ -14,6 +14,7 @@ import { colors, gradients, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, topics } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import { getCurrentUser } from '../services/authService';
 import { getActiveMatch, leaveQueue } from '../services/matchService';
 import { requestMicrophonePermission } from '../services/permissionsService';
@@ -445,7 +446,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
         shouldRouteThroughEarpiece: false,
       }).catch((error) => {
         if (mounted) {
-          showVoiceError(error instanceof Error ? error.message : 'Ses oturumu hazirlanamadi.');
+          showVoiceError(getFriendlyErrorMessage(error, 'Ses oturumu hazırlanamadı. Lütfen tekrar deneyin.'));
         }
       });
     };
