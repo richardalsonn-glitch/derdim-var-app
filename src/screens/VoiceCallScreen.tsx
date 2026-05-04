@@ -482,7 +482,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
         return;
       }
 
-      const joinResult = await joinRoom('test-room', currentUserResult.data.id);
+      const joinResult = await joinRoom(partner.id);
 
       if (cancelled) {
         if (joinResult.data) {

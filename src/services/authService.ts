@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
 import { defaultProfile } from '../data/mockData';
+import { getSafeErrorMessage, logSafeError } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { MembershipPlan } from '../types';
 
@@ -40,9 +41,6 @@ export const authRedirectUri = makeRedirectUri({
   scheme: 'derdimvar',
   path: AUTH_CALLBACK_PATH,
 });
-
-console.info('[auth] redirectUri:', authRedirectUri);
-console.info('[auth] nativeRedirectUri:', NATIVE_REDIRECT_URI);
 
 function getMissingEnvError(): AuthServiceError {
   return {
@@ -174,7 +172,7 @@ async function upsertProfileRecord(
       email: fallbackProfile.email,
     };
   } catch (error) {
-    console.warn('[auth] profiles upsert skipped:', error);
+    console.warn('[auth] profiles upsert skipped:', getSafeErrorMessage(error, 'unknown error'));
     return fallbackProfile;
   }
 }
@@ -492,7 +490,7 @@ export async function signInWithApple(): Promise<AuthServiceResult<AuthPayload>>
       error: null,
     };
   } catch (error) {
-    console.error('[auth] Apple sign-in failed:', error);
+    logSafeError('[auth] Apple sign-in failed', error);
 
     if (
       typeof error === 'object' &&
@@ -514,8 +512,6 @@ export async function signInWithGoogle(): Promise<AuthServiceResult<AuthPayload>
   if (!isSupabaseConfigured) {
     return { data: null, error: getMissingEnvError() };
   }
-
-  console.info('[auth] Google redirectUri:', authRedirectUri);
 
   try {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -571,7 +567,7 @@ export async function signInWithGoogle(): Promise<AuthServiceResult<AuthPayload>
       error: null,
     };
   } catch (error) {
-    console.error('[auth] Google sign-in failed:', error);
+    logSafeError('[auth] Google sign-in failed', error);
     return { data: null, error: toAuthError(error, 'Google ile giris basarisiz oldu.') };
   }
 }

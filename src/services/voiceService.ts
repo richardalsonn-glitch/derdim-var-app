@@ -22,8 +22,6 @@ type VoiceRoomState = {
   speakerEnabled: boolean;
 };
 
-const DEFAULT_ROOM_NAME = 'test-room';
-
 let activeRoom: Room | null = null;
 let activeSpeakerEnabled = true;
 
@@ -70,21 +68,60 @@ function getActiveMuteState() {
   return !(activeRoom?.localParticipant.isMicrophoneEnabled ?? false);
 }
 
-async function buildAuthHeaders() {
+async function buildAuthHeaders(): Promise<VoiceServiceResult<Record<string, string>>> {
   const sessionResult = await getSession();
   const sessionToken = sessionResult.data?.access_token;
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
 
+  if (sessionResult.error) {
+    return {
+      data: null,
+      error: { message: sessionResult.error.message },
+    };
+  }
+
+  if (!sessionToken) {
+    return {
+      data: null,
+      error: { message: 'Sesli gorusme icin aktif kullanici oturumu gerekli.' },
+    };
+  }
+
   return {
-    Authorization: `Bearer ${sessionToken ?? anonKey}`,
-    apikey: anonKey,
-    'Content-Type': 'application/json',
+    data: {
+      Authorization: `Bearer ${sessionToken}`,
+      apikey: anonKey,
+      'Content-Type': 'application/json',
+    },
+    error: null,
   };
 }
 
+async function releaseTokenSession() {
+  const endpoint = getFunctionUrl();
+
+  if (!endpoint) {
+    return;
+  }
+
+  const headerResult = await buildAuthHeaders();
+
+  if (headerResult.error || !headerResult.data) {
+    return;
+  }
+
+  try {
+    await fetch(endpoint, {
+      method: 'DELETE',
+      headers: headerResult.data,
+    });
+  } catch {
+    // Release failures should not block local disconnect cleanup.
+  }
+}
+
 export async function createToken(
-  userId: string,
-  roomName = DEFAULT_ROOM_NAME,
+  peerUserId: string,
 ): Promise<VoiceServiceResult<CreateTokenPayload>> {
   const endpoint = getFunctionUrl();
   const wsUrl = getLivekitUrl();
@@ -104,12 +141,17 @@ export async function createToken(
   }
 
   try {
+    const headerResult = await buildAuthHeaders();
+
+    if (headerResult.error || !headerResult.data) {
+      return { data: null, error: headerResult.error };
+    }
+
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: await buildAuthHeaders(),
+      headers: headerResult.data,
       body: JSON.stringify({
-        userId,
-        roomName,
+        peerUserId,
       }),
     });
 
@@ -145,10 +187,9 @@ export async function createToken(
 }
 
 export async function joinRoom(
-  roomName = DEFAULT_ROOM_NAME,
-  userId: string,
+  peerUserId: string,
 ): Promise<VoiceServiceResult<VoiceRoomState>> {
-  const tokenResult = await createToken(userId, roomName);
+  const tokenResult = await createToken(peerUserId);
 
   if (tokenResult.error || !tokenResult.data) {
     return { data: null, error: tokenResult.error };
@@ -219,6 +260,7 @@ export async function leaveRoom(): Promise<VoiceServiceResult<true>> {
     }
 
     await AudioSession.stopAudioSession();
+    await releaseTokenSession();
 
     return { data: true, error: null };
   } catch (error) {

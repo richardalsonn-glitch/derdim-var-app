@@ -5,6 +5,8 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { logSafeError } from './src/lib/safeLogger';
+
 registerGlobals();
 
 function FallbackApp() {
@@ -19,7 +21,7 @@ class RootErrorBoundary extends React.Component<React.PropsWithChildren, { hasEr
   }
 
   componentDidCatch(error: unknown) {
-    console.error('Root render failed', error);
+    logSafeError('Root render failed', error);
   }
 
   render() {
@@ -36,7 +38,7 @@ function loadAppProvider() {
     const module = require('./src/data/AppContext');
     return module.AppProvider ?? (({ children }: React.PropsWithChildren) => <>{children}</>);
   } catch (error) {
-    console.error('AppContext import failed', error);
+    logSafeError('AppContext import failed', error);
     return ({ children }: React.PropsWithChildren) => <>{children}</>;
   }
 }
@@ -46,7 +48,7 @@ function loadAppNavigator() {
     const module = require('./src/navigation/AppNavigator');
     return module.AppNavigator ?? FallbackApp;
   } catch (error) {
-    console.error('AppNavigator import failed', error);
+    logSafeError('AppNavigator import failed', error);
     return FallbackApp;
   }
 }
@@ -67,7 +69,7 @@ export default function App() {
       </RootErrorBoundary>
     );
   } catch (error) {
-    console.error('App bootstrap failed', error);
+    logSafeError('App bootstrap failed', error);
     return <FallbackApp />;
   }
 }

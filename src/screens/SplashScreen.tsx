@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NoticeModal } from '../components/NoticeModal';
 import { colors } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
+import { getSafeErrorMessage } from '../lib/safeLogger';
 import { AppScreenProps } from '../navigation/types';
 import { restoreAuthProfile, signInWithApple, signInWithGoogle } from '../services/authService';
 
@@ -226,7 +227,7 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
         routes: [{ name: 'Home' }],
       });
     } catch (error) {
-      console.error(`[auth] ${provider} sign-in crashed:`, error);
+      console.error(`[auth] ${provider} sign-in crashed:`, getSafeErrorMessage(error));
       openSocialError(
         provider === 'apple' ? 'Apple ile giris basarisiz' : 'Google ile giris basarisiz',
         'Beklenmeyen bir hata olustu. Lutfen tekrar dene.',
