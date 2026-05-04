@@ -28,6 +28,10 @@ export function getFriendlyErrorMessage(error: unknown, fallback = DEFAULT_ERROR
     return fallback;
   }
 
+  if (lower.includes('database error saving new user')) {
+    return 'Kayıt sırasında profil oluşturulamadı. Lütfen tekrar deneyin.';
+  }
+
   if (lower.includes('email not confirmed') || lower.includes('email confirmation')) {
     return 'E-posta doğrulaması gerekiyor. Lütfen e-postanı kontrol et.';
   }
