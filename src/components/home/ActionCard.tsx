@@ -12,14 +12,23 @@ type ActionCardProps = {
   gradient: readonly [string, string, string];
   glowColor: string;
   compact?: boolean;
+  disabled?: boolean;
   height?: number;
   palette: HomePalette;
   onPress: () => void;
 };
 
-export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact = false, height, palette, onPress }: ActionCardProps) {
+export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact = false, disabled = false, height, palette, onPress }: ActionCardProps) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.pressable, { transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pressable,
+        disabled && styles.pressableDisabled,
+        { transform: [{ scale: pressed && !disabled ? 0.985 : 1 }] },
+      ]}
+    >
       <LinearGradient
         colors={[...gradient]}
         end={{ x: 1, y: 0.85 }}
@@ -65,6 +74,9 @@ export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact
 const styles = StyleSheet.create({
   pressable: {
     flex: 1,
+  },
+  pressableDisabled: {
+    opacity: 0.72,
   },
   card: {
     flex: 1,

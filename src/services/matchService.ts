@@ -14,6 +14,9 @@ type MatchServiceResult<T> = {
   error: MatchServiceError | null;
 };
 
+const MATCH_RETRY_MESSAGE = 'Eslesme sirasi yenilendi, tekrar deneniyor...';
+const MATCH_START_ERROR_MESSAGE = 'Eslesme su anda baslatilamadi. Lutfen tekrar dene.';
+
 let activeQueue: MatchmakingQueueRow | null = null;
 let activePartnerProfile: MatchParticipantProfile | null = null;
 let matchChannel: RealtimeChannel | null = null;
@@ -114,7 +117,88 @@ async function refreshCurrentQueue(): Promise<MatchmakingQueueRow | null> {
   return data ?? null;
 }
 
-export async function joinQueue(mode: MatchmakingMode): Promise<MatchServiceResult<MatchmakingState>> {
+function isDuplicateKeyError(error: { code?: string; message?: string } | null) {
+  return error?.code === '23505' || error?.message?.toLowerCase().includes('duplicate key');
+}
+
+async function releasePartnerMatch(existingQueue: MatchmakingQueueRow | null) {
+  if (!existingQueue?.matched_with) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('matchmaking_queue')
+    .update({ status: 'waiting', matched_with: null })
+    .eq('user_id', existingQueue.matched_with)
+    .eq('matched_with', existingQueue.user_id)
+    .eq('status', 'matched');
+
+  if (error) {
+    console.error('[match] releasePartnerMatch failed:', error.message);
+  }
+}
+
+async function fetchUserQueue(userId: string): Promise<MatchmakingQueueRow | null> {
+  const { data, error } = await supabase
+    .from('matchmaking_queue')
+    .select('id, user_id, mode, status, matched_with, created_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[match] fetchUserQueue failed:', error.message);
+  }
+
+  return data ?? null;
+}
+
+async function deleteUserQueue(userId: string) {
+  const existingQueue = await fetchUserQueue(userId);
+  await releasePartnerMatch(existingQueue);
+
+  const { error } = await supabase.from('matchmaking_queue').delete().eq('user_id', userId);
+
+  if (error) {
+    console.error('[match] deleteUserQueue failed:', error.message);
+    return { data: null, error: { message: MATCH_START_ERROR_MESSAGE } };
+  }
+
+  return { data: true, error: null };
+}
+
+async function upsertUserQueue(userId: string, mode: MatchmakingMode): Promise<MatchServiceResult<MatchmakingQueueRow>> {
+  const existingQueue = await fetchUserQueue(userId);
+  await releasePartnerMatch(existingQueue);
+
+  const { data, error } = await supabase
+    .from('matchmaking_queue')
+    .upsert(
+      {
+        user_id: userId,
+        mode,
+        status: 'waiting',
+        matched_with: null,
+        created_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    )
+    .select('id, user_id, mode, status, matched_with, created_at')
+    .single();
+
+  if (error) {
+    console.error('[match] upsertUserQueue failed:', error.message);
+    return {
+      data: null,
+      error: {
+        message: isDuplicateKeyError(error) ? MATCH_RETRY_MESSAGE : MATCH_START_ERROR_MESSAGE,
+      },
+    };
+  }
+
+  return { data, error: null };
+}
+
+async function joinQueueOnce(mode: MatchmakingMode, shouldRetryDuplicate: boolean): Promise<MatchServiceResult<MatchmakingState>> {
   const userIdResult = await getAuthenticatedUserId();
 
   if (userIdResult.error || !userIdResult.data) {
@@ -124,28 +208,28 @@ export async function joinQueue(mode: MatchmakingMode): Promise<MatchServiceResu
   const userId = userIdResult.data;
 
   await clearChannel();
-  await supabase.from('matchmaking_queue').delete().eq('user_id', userId);
+  const upsertResult = await upsertUserQueue(userId, mode);
 
-  const { data, error } = await supabase
-    .from('matchmaking_queue')
-    .insert({
-      user_id: userId,
-      mode,
-      status: 'waiting',
-      matched_with: null,
-    })
-    .select('id, user_id, mode, status, matched_with, created_at')
-    .single();
+  if (upsertResult.error || !upsertResult.data) {
+    if (shouldRetryDuplicate && upsertResult.error?.message === MATCH_RETRY_MESSAGE) {
+      await deleteUserQueue(userId);
+      return joinQueueOnce(mode, false);
+    }
 
-  if (error) {
-    console.error('[match] joinQueue failed:', error.message);
-    return { data: null, error: { message: error.message } };
+    return {
+      data: null,
+      error: { message: upsertResult.error?.message ?? MATCH_START_ERROR_MESSAGE },
+    };
   }
 
-  activeQueue = data;
+  activeQueue = upsertResult.data;
   activePartnerProfile = null;
 
   return findMatch();
+}
+
+export async function joinQueue(mode: MatchmakingMode): Promise<MatchServiceResult<MatchmakingState>> {
+  return joinQueueOnce(mode, true);
 }
 
 export async function findMatch(): Promise<MatchServiceResult<MatchmakingState>> {
@@ -310,29 +394,25 @@ export async function leaveQueue(): Promise<MatchServiceResult<true>> {
 
   await clearChannel();
 
-  if (!activeQueue) {
+  const userIdResult = await getAuthenticatedUserId();
+
+  if (userIdResult.error || !userIdResult.data) {
     activePartnerProfile = null;
+    activeQueue = null;
     return { data: true, error: null };
   }
 
-  const queueToRemove = activeQueue;
+  const queueToRemove = activeQueue ?? (await fetchUserQueue(userIdResult.data));
   activeQueue = null;
   activePartnerProfile = null;
 
-  if (queueToRemove.matched_with) {
-    await supabase
-      .from('matchmaking_queue')
-      .update({ status: 'waiting', matched_with: null })
-      .eq('user_id', queueToRemove.matched_with)
-      .eq('matched_with', queueToRemove.user_id)
-      .eq('status', 'matched');
-  }
+  await releasePartnerMatch(queueToRemove);
 
-  const { error } = await supabase.from('matchmaking_queue').delete().eq('id', queueToRemove.id);
+  const { error } = await supabase.from('matchmaking_queue').delete().eq('user_id', userIdResult.data);
 
   if (error) {
     console.error('[match] leaveQueue delete failed:', error.message);
-    return { data: null, error: { message: error.message } };
+    return { data: null, error: { message: MATCH_START_ERROR_MESSAGE } };
   }
 
   return { data: true, error: null };

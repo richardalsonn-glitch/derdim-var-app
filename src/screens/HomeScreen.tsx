@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { ProfileCard } from '../components/home/ProfileCard';
 import { ThemeToggle } from '../components/home/ThemeToggle';
 import { DrawerItem, FeatureItem, HomePalette } from '../components/home/types';
 import { NoticeModal } from '../components/NoticeModal';
+import { isLiveKitEnabled } from '../config/features';
 import { colors, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById } from '../data/mockData';
@@ -246,9 +247,11 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   const [activeTab, setActiveTab] = useState('home');
   const [matchErrorVisible, setMatchErrorVisible] = useState(false);
   const [matchErrorMessage, setMatchErrorMessage] = useState('Eslesme su anda baslatilamadi.');
+  const [isJoiningQueue, setIsJoiningQueue] = useState(false);
   const fadeValue = useRef(new Animated.Value(0)).current;
   const matchmakingRequestRef = useRef(0);
   const matchmakingPhaseRef = useRef<'idle' | 'waiting' | 'matched'>('idle');
+  const isJoiningQueueRef = useRef(false);
   const matchListenerCleanupRef = useRef<null | (() => Promise<void>)>(null);
 
   useEffect(() => {
@@ -367,24 +370,38 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   }
 
   async function openVoiceRole(role: MatchRole) {
-    resetAutoCall();
-    setPendingAction({ type: 'role', role });
-    const result = await requestMicrophonePermission();
-
-    if (!result.granted) {
-      setPermissionModalVisible(true);
+    if (isJoiningQueueRef.current) {
       return;
     }
 
-    await stopMatchmaking();
-    await startMatchmaking(role);
+    isJoiningQueueRef.current = true;
+    setIsJoiningQueue(true);
+    resetAutoCall();
+    setPendingAction({ type: 'role', role });
+
+    try {
+      if (isLiveKitEnabled) {
+        const result = await requestMicrophonePermission();
+
+        if (!result.granted) {
+          setPermissionModalVisible(true);
+          return;
+        }
+      }
+
+      await stopMatchmaking();
+      await startMatchmaking(role);
+    } finally {
+      isJoiningQueueRef.current = false;
+      setIsJoiningQueue(false);
+    }
   }
 
   async function openVoiceFeature(route: 'NightMode' | 'SilentScream') {
     resetAutoCall();
     setPendingAction({ type: 'route', route });
 
-    if (route === 'NightMode') {
+    if (route === 'NightMode' && isLiveKitEnabled) {
       const result = await requestMicrophonePermission();
 
       if (!result.granted) {
@@ -517,6 +534,16 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
   }, []);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' && matchmakingPhaseRef.current === 'waiting') {
+        void stopMatchmaking();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   const profileData = {
     username: profile.username,
     plan: profile.plan,
@@ -588,6 +615,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
               gradient={['#FF4A7A', '#FF3FA7', '#9426C8']}
               height={metrics.ctaCardHeight}
               icon="heart"
+              disabled={isJoiningQueue}
               onPress={() => void openVoiceRole('derdim-var')}
               palette={palette}
               subtitle="İçimi dökmek istiyorum"
@@ -601,6 +629,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
               gradient={['#8A3CFF', '#5D34FF', '#245CFF']}
               height={metrics.ctaCardHeight}
               icon="headset"
+              disabled={isJoiningQueue}
               onPress={() => void openVoiceRole('derman-olan')}
               palette={palette}
               subtitle="Birini dinlemek istiyorum"

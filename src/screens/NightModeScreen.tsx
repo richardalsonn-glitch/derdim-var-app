@@ -8,6 +8,7 @@ import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
+import { isLiveKitEnabled } from '../config/features';
 import { colors, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, nightRoomUsers } from '../data/mockData';
@@ -32,11 +33,15 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   }, [glow]);
 
   const handleWordTake = async () => {
-    const result = await requestMicrophonePermission();
-    if (!result.granted) {
-      setPermissionModalVisible(true);
-      return;
+    if (isLiveKitEnabled) {
+      const result = await requestMicrophonePermission();
+
+      if (!result.granted) {
+        setPermissionModalVisible(true);
+        return;
+      }
     }
+
     setActiveRole('derdim-var');
     navigation.navigate('Matching');
   };
