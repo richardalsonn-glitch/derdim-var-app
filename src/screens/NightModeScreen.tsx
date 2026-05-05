@@ -18,7 +18,7 @@ import {
   subscribeToNightVoiceRoomsLobby,
 } from '../services/voiceRoomService';
 import { VoiceRoom } from '../types';
-import { getNightModeSubtitle, isNightModeOpen, NIGHT_MODE_CLOSED_MESSAGE } from '../utils/nightMode';
+import { isNightModeOpen, NIGHT_MODE_CLOSED_MESSAGE } from '../utils/nightMode';
 
 const nightRoomBackground = require('../../assets/images/night-room-background.png');
 
@@ -184,12 +184,21 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     navigation.navigate('NightRoom', { roomId: room.id });
   }
 
-  function renderMiniSeat(room: VoiceRoom, seatIndex: number) {
+  function renderMiniSeat(room: VoiceRoom, seatIndex: number, isPaid: boolean) {
     const member = room.members.find((item) => item.seatIndex === seatIndex);
     const seatPositionStyle = [styles.miniSeatTop, styles.miniSeatRight, styles.miniSeatBottom, styles.miniSeatLeft][seatIndex];
 
     return (
-      <View key={seatIndex} style={[styles.miniSeat, seatPositionStyle, member && styles.filledMiniSeat]}>
+      <View
+        key={seatIndex}
+        style={[
+          styles.miniSeat,
+          isPaid && styles.paidMiniSeat,
+          seatPositionStyle,
+          member && styles.filledMiniSeat,
+          member && isPaid && styles.paidFilledMiniSeat,
+        ]}
+      >
         {member ? (
           <Avatar avatar={getAvatarById(member.avatarId)} size={22} />
         ) : (
@@ -204,7 +213,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     const isFull = room.currentCount >= room.capacity || room.status === 'full';
     const isMember = room.members.some((member) => member.userId === currentUserId);
     const hasPendingRequest = room.requests.some((request) => request.requesterId === currentUserId && request.status === 'pending');
-    const buttonTitle = isMember ? 'Gir' : isFull ? 'Dolu' : isPaid && room.ownerId ? (hasPendingRequest ? 'Bekliyor' : 'İstek') : 'Otur';
+    const buttonTitle = isMember ? 'Gir' : isFull ? 'Dolu' : hasPendingRequest ? 'Bekliyor' : 'Otur';
 
     return (
       <Pressable
@@ -215,9 +224,10 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
       >
         <LinearGradient
           colors={isPaid ? ['rgba(244,180,94,0.2)', 'rgba(153,70,255,0.1)', 'rgba(8,10,32,0.78)'] : ['rgba(69,224,255,0.14)', 'rgba(153,70,255,0.12)', 'rgba(8,10,32,0.78)']}
-          style={[styles.roomCard, isFull && styles.fullRoomCard]}
+          style={[styles.roomCard, isPaid ? styles.paidRoomCard : styles.freeRoomCard, isFull && styles.fullRoomCard]}
         >
           <View pointerEvents="none" style={[styles.cardSheen, isPaid && styles.paidCardSheen]} />
+          <View pointerEvents="none" style={[styles.cardAccent, isPaid ? styles.paidCardAccent : styles.freeCardAccent]} />
           <View style={styles.roomCardHeader}>
             <Text numberOfLines={1} style={styles.roomName}>{room.name || 'Şu anda bu oda müsaittir'}</Text>
             <Text style={styles.roomCount}>{room.currentCount}/{room.capacity}</Text>
@@ -231,7 +241,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             <View style={[styles.miniTable, isPaid && styles.paidMiniTable]}>
               <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={24} />
             </View>
-            {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index))}
+            {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index, isPaid))}
           </View>
 
           <View style={styles.roomCardFooter}>
@@ -250,15 +260,26 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     );
   }
 
-  function renderSection(title: string, subtitle: string, sectionRooms: VoiceRoom[]) {
+  function renderSection(title: string, subtitle: string, sectionRooms: VoiceRoom[], kind: 'free' | 'paid') {
+    const paid = kind === 'paid';
+
     return (
-      <View style={styles.section}>
+      <LinearGradient
+        colors={paid ? ['rgba(244,180,94,0.13)', 'rgba(255,79,185,0.08)', 'rgba(8,10,32,0.42)'] : ['rgba(69,224,255,0.12)', 'rgba(81,93,255,0.08)', 'rgba(8,10,32,0.42)']}
+        style={[styles.section, paid ? styles.paidSection : styles.freeSection]}
+      >
+        <View pointerEvents="none" style={[styles.sectionGlow, paid ? styles.paidSectionGlow : styles.freeSectionGlow]} />
         <View style={styles.sectionMetaRow}>
-          <Text style={styles.sectionTitle}>{title}</Text>
+          <View style={styles.sectionTitleWrap}>
+            <View style={[styles.sectionIcon, paid ? styles.paidSectionIcon : styles.freeSectionIcon]}>
+              <Ionicons color={paid ? colors.goldSoft : colors.cyan} name={paid ? 'sparkles' : 'moon'} size={15} />
+            </View>
+            <Text style={styles.sectionTitle}>{title}</Text>
+          </View>
           <Text style={styles.sectionHint}>{subtitle}</Text>
         </View>
         <View style={styles.roomGrid}>{sectionRooms.map(renderRoomCard)}</View>
-      </View>
+      </LinearGradient>
     );
   }
 
@@ -273,7 +294,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
               </Pressable>
               <View style={styles.headerCopy}>
                 <Text style={styles.headerTitle}>Gece Modu</Text>
-                <Text style={styles.headerSubtitle}>{getNightModeSubtitle(isDemoMode)}</Text>
+                <Text style={styles.headerSubtitle}>22:00 - 06:00 • Türkiye saati</Text>
               </View>
             </View>
 
@@ -302,8 +323,8 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
                   </View>
                 </LinearGradient>
 
-                {renderSection('Ücretsiz Odalar', '4 kişi dolunca konuşma başlar', freeRooms)}
-                {renderSection('Ücretli Odalar', 'Sahipli oda, istekle katılım', paidRooms)}
+                {renderSection('Ücretsiz Odalar', '4 kişi dolunca konuşma başlar', freeRooms, 'free')}
+                {renderSection('Ücretli Odalar', 'Sahipli oda, istekle katılım', paidRooms, 'paid')}
               </>
             )}
           </View>
@@ -424,17 +445,66 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   section: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
     gap: spacing.sm,
+    overflow: 'hidden',
+    padding: spacing.sm,
+    position: 'relative',
+  },
+  freeSection: {
+    borderColor: 'rgba(69,224,255,0.28)',
+  },
+  paidSection: {
+    borderColor: 'rgba(244,180,94,0.3)',
+  },
+  sectionGlow: {
+    borderRadius: 999,
+    height: 140,
+    position: 'absolute',
+    right: -54,
+    top: -66,
+    width: 140,
+  },
+  freeSectionGlow: {
+    backgroundColor: 'rgba(69,224,255,0.12)',
+  },
+  paidSectionGlow: {
+    backgroundColor: 'rgba(244,180,94,0.15)',
   },
   sectionMetaRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: spacing.sm,
     justifyContent: 'space-between',
+  },
+  sectionTitleWrap: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minWidth: 0,
+  },
+  sectionIcon: {
+    alignItems: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  freeSectionIcon: {
+    backgroundColor: 'rgba(69,224,255,0.12)',
+    borderColor: 'rgba(69,224,255,0.32)',
+  },
+  paidSectionIcon: {
+    backgroundColor: 'rgba(244,180,94,0.14)',
+    borderColor: 'rgba(244,180,94,0.34)',
   },
   sectionTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: '900',
+    flexShrink: 1,
   },
   sectionHint: {
     color: colors.muted,
@@ -453,12 +523,36 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   roomCard: {
-    borderColor: 'rgba(126,135,217,0.62)',
     borderRadius: radius.lg,
     borderWidth: 1,
     minHeight: 214,
     overflow: 'hidden',
     padding: spacing.sm,
+  },
+  freeRoomCard: {
+    borderColor: 'rgba(69,224,255,0.5)',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+  },
+  paidRoomCard: {
+    borderColor: 'rgba(244,180,94,0.54)',
+    shadowColor: colors.pink,
+    shadowOpacity: 0.26,
+    shadowRadius: 18,
+  },
+  cardAccent: {
+    bottom: 0,
+    height: 3,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  freeCardAccent: {
+    backgroundColor: colors.cyan,
+  },
+  paidCardAccent: {
+    backgroundColor: colors.goldSoft,
   },
   cardSheen: {
     backgroundColor: 'rgba(69,224,255,0.1)',
@@ -541,7 +635,9 @@ const styles = StyleSheet.create({
     width: 70,
   },
   paidMiniTable: {
+    backgroundColor: 'rgba(48,28,20,0.78)',
     borderColor: 'rgba(244,180,94,0.52)',
+    shadowColor: colors.goldSoft,
   },
   miniSeat: {
     alignItems: 'center',
@@ -554,9 +650,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 44,
   },
+  paidMiniSeat: {
+    backgroundColor: 'rgba(244,180,94,0.08)',
+    borderColor: 'rgba(244,180,94,0.34)',
+  },
   filledMiniSeat: {
     backgroundColor: 'rgba(153,70,255,0.24)',
     borderColor: 'rgba(247,238,255,0.24)',
+  },
+  paidFilledMiniSeat: {
+    backgroundColor: 'rgba(244,180,94,0.18)',
+    borderColor: 'rgba(255,213,154,0.38)',
   },
   miniSeatTop: {
     top: 0,
