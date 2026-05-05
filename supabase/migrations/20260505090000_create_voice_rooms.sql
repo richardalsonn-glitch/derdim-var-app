@@ -11,12 +11,12 @@ create table if not exists public.voice_rooms (
   room_type text not null check (room_type in ('night', 'dert_sira')),
   pricing_type text not null check (pricing_type in ('free', 'paid')),
   name text default 'Şu anda bu oda müsaittir',
-  owner_id uuid nullable,
+  owner_id uuid,
   status text default 'open' check (status in ('open', 'full', 'active', 'expired', 'closed')),
   capacity int not null,
   current_count int default 0,
-  starts_at timestamptz nullable,
-  expires_at timestamptz nullable,
+  starts_at timestamptz,
+  expires_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -26,7 +26,7 @@ create table if not exists public.voice_room_members (
   room_id uuid references public.voice_rooms(id) on delete cascade,
   user_id uuid not null,
   role text default 'listener' check (role in ('owner', 'speaker', 'listener', 'member')),
-  seat_index int nullable,
+  seat_index int,
   mic_enabled boolean default false,
   speaker_enabled boolean default false,
   status text default 'joined' check (status in ('joined', 'kicked', 'left', 'pending')),
@@ -46,7 +46,7 @@ create table if not exists public.voice_room_join_requests (
 create table if not exists public.voice_room_events (
   id uuid primary key default gen_random_uuid(),
   room_id uuid references public.voice_rooms(id) on delete cascade,
-  user_id uuid nullable,
+  user_id uuid,
   event_type text,
   payload jsonb default '{}',
   created_at timestamptz default now()
