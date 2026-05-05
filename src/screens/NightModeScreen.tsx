@@ -87,15 +87,16 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const tiny = height < 720;
   const compact = height < 800;
   const horizontalPadding = width < 380 ? 12 : 16;
-  const contentGap = tiny ? 5 : compact ? 7 : 9;
-  const heroHeight = tiny ? 68 : compact ? 74 : 82;
-  const heroIconSize = tiny ? 38 : compact ? 42 : 46;
-  const cardHeight = tiny ? 160 : compact ? 170 : 182;
-  const miniSceneHeight = tiny ? 58 : compact ? 64 : 70;
-  const miniTableSize = tiny ? 32 : compact ? 36 : 40;
-  const miniSeatWidth = tiny ? 34 : 36;
+  const contentGap = tiny ? 4 : compact ? 6 : 8;
+  const heroHeight = tiny ? 62 : compact ? 68 : 74;
+  const heroIconSize = tiny ? 34 : compact ? 38 : 42;
+  const cardHeight = tiny ? 176 : compact ? 188 : 202;
+  const miniSceneHeight = tiny ? 70 : compact ? 76 : 82;
+  const miniTableSize = tiny ? 28 : compact ? 31 : 34;
+  const miniSeatWidth = tiny ? 35 : 38;
   const miniSeatHeight = tiny ? 28 : 30;
   const miniSeatSideTop = (miniSceneHeight - miniSeatHeight) / 2;
+  const miniSeatInset = tiny ? -1 : -2;
   const miniAvatarSize = tiny ? 16 : 18;
 
   const loadRooms = useCallback(async (silent = false) => {
@@ -207,9 +208,9 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     const member = room.members.find((item) => item.seatIndex === seatIndex);
     const seatPositionStyle = [
       { left: '50%' as const, marginLeft: -miniSeatWidth / 2, top: 0 },
-      { right: 0, top: miniSeatSideTop },
+      { right: miniSeatInset, top: miniSeatSideTop },
       { bottom: 0, left: '50%' as const, marginLeft: -miniSeatWidth / 2 },
-      { left: 0, top: miniSeatSideTop },
+      { left: miniSeatInset, top: miniSeatSideTop },
     ][seatIndex];
 
     return (
@@ -264,7 +265,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 
           <View style={[styles.miniRoomScene, { height: miniSceneHeight }]}>
             <View style={[styles.miniTable, { borderRadius: miniTableSize / 2, height: miniTableSize, width: miniTableSize }, isPaid && styles.paidMiniTable]}>
-              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={tiny ? 16 : 18} />
+              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={tiny ? 14 : 16} />
             </View>
             {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index, isPaid))}
           </View>
@@ -359,7 +360,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             </LinearGradient>
           ) : (
             <>
-              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.heroCard, { minHeight: heroHeight, paddingHorizontal: tiny ? 10 : 12, paddingVertical: tiny ? 8 : 10 }]}>
+              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.heroCard, { minHeight: heroHeight, paddingHorizontal: tiny ? 9 : 11, paddingVertical: tiny ? 6 : 8 }]}>
                 <View style={[styles.heroIcon, { borderRadius: heroIconSize / 2, height: heroIconSize, width: heroIconSize }]}>
                   <Ionicons color={colors.goldSoft} name="moon" size={tiny ? 20 : 22} />
                 </View>
@@ -498,7 +499,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 7,
-    height: 40,
+    height: 36,
     justifyContent: 'center',
   },
   activeFreeSegment: {
@@ -524,9 +525,9 @@ const styles = StyleSheet.create({
   section: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    gap: 7,
+    gap: 5,
     overflow: 'hidden',
-    padding: 8,
+    padding: 7,
     position: 'relative',
   },
   freeSection: {
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 8,
+    rowGap: 9,
   },
   roomPressable: {
     width: '48%',
@@ -604,7 +605,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 0,
     overflow: 'hidden',
-    padding: 8,
+    padding: 10,
   },
   freeRoomCard: {
     borderColor: 'rgba(69,224,255,0.5)',
@@ -695,7 +696,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 116,
     justifyContent: 'center',
-    marginTop: 5,
+    marginTop: 7,
     position: 'relative',
   },
   miniTable: {
@@ -762,7 +763,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: 6,
   },
   timePill: {
     alignItems: 'center',
@@ -787,9 +788,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(126,135,255,0.7)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 30,
+    height: 32,
     justifyContent: 'center',
-    marginTop: 5,
+    marginTop: 6,
   },
   paidInlineButton: {
     backgroundColor: 'rgba(244,180,94,0.13)',

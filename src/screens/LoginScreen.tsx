@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, ImageBackground, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -81,7 +81,8 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
   return (
     <ImageBackground resizeMode="cover" source={loginBackground} style={styles.background}>
       <View pointerEvents="none" style={styles.readabilityOverlay} />
-      <SafeAreaView style={styles.safeArea}>
+      <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+        <SafeAreaView style={styles.safeArea}>
         {canGoBack ? (
           <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { left: horizontalPadding, top: tiny ? 8 : 10 }]}>
             <Ionicons color={colors.text} name="chevron-back" size={24} />
@@ -140,7 +141,8 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
             </View>
           </LinearGradient>
         </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </TouchableWithoutFeedback>
 
       <NoticeModal
         actions={[

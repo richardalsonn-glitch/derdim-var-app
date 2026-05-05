@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Animated, ImageBackground, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -308,7 +308,9 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
           </View>
         ) : null}
 
-        <View
+        <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+          <View style={styles.dismissLayer}>
+            <View
           style={[
             styles.loginModule,
             {
@@ -317,8 +319,8 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
               top: moduleTop,
             },
           ]}
-        >
-          <LinearGradient
+            >
+              <LinearGradient
             colors={['rgba(9,12,34,0.48)', 'rgba(68,31,102,0.36)', 'rgba(9,12,34,0.48)']}
             style={[styles.moduleGlass, { gap: tiny ? 5 : 6, padding: tiny ? 8 : 10 }]}
           >
@@ -397,8 +399,10 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
                 <Text style={styles.modeSwitchButton}>{authMode === 'login' ? 'Kayıt Ol' : 'Giriş Yap'}</Text>
               </Pressable>
             </View>
-          </LinearGradient>
-        </View>
+              </LinearGradient>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
       </ImageBackground>
 
       <NoticeModal
@@ -450,6 +454,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.48,
     shadowRadius: 22,
     width: 52,
+  },
+  dismissLayer: {
+    flex: 1,
   },
   loginModule: {
     alignSelf: 'center',
