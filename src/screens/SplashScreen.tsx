@@ -1,86 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { NoticeModal } from '../components/NoticeModal';
-import { colors } from '../constants/theme';
+import { colors, gradients, layout, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { getSafeErrorMessage } from '../lib/safeLogger';
 import { AppScreenProps } from '../navigation/types';
-import { restoreAuthProfile, signInWithApple, signInWithGoogle } from '../services/authService';
-import { getFriendlyErrorMessage } from '../utils/errorMessages';
+import { restoreAuthProfile } from '../services/authService';
 
-const welcomeBg = require('../../assets/images/giris-ekrani2.png');
-
-type SplashActionButtonProps = {
-  title: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-};
-
-function SplashActionButton({
-  title,
-  icon,
-  onPress,
-  primary = false,
-  disabled = false,
-}: SplashActionButtonProps) {
-  const content = (
-    <View style={styles.buttonContent}>
-      <View style={styles.buttonIconSlot}>
-        {icon ? <Ionicons color={colors.text} name={icon} size={20} /> : null}
-      </View>
-      <Text style={styles.buttonLabel}>{title}</Text>
-      <View style={styles.buttonIconSlot} />
-    </View>
-  );
-
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.buttonPressable, (pressed || disabled) && styles.buttonPressed]}>
-      {primary ? (
-        <LinearGradient
-          colors={['#FF4FB9', '#9248FF', '#3F85FF']}
-          end={{ x: 1, y: 0.5 }}
-          start={{ x: 0, y: 0.5 }}
-          style={styles.primaryButton}>
-          {content}
-        </LinearGradient>
-      ) : (
-        <View style={styles.secondaryButton}>{content}</View>
-      )}
-    </Pressable>
-  );
-}
+const welcomeBg = require('../../assets/images/anasayfayeni12.png');
 
 export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
+  const { height, width } = useWindowDimensions();
   const { profile, updateProfile } = useAppState();
   const [assetReady, setAssetReady] = useState(false);
   const [sessionRestored, setSessionRestored] = useState(false);
-  const [socialAuthPending, setSocialAuthPending] = useState<'apple' | 'google' | null>(null);
-  const [socialModalVisible, setSocialModalVisible] = useState(false);
-  const [socialModalTitle, setSocialModalTitle] = useState('Sosyal giris basarisiz');
-  const [socialModalMessage, setSocialModalMessage] = useState(
-    'Sosyal giris sirasinda bir hata olustu.',
-  );
+  const [identifier, setIdentifier] = useState('');
   const insets = useSafeAreaInsets();
   const heroFade = useRef(new Animated.Value(0)).current;
   const loadingPulse = useRef(new Animated.Value(0.5)).current;
-  const heartPulse = useRef(new Animated.Value(0)).current;
   const restoreStarted = useRef(false);
-  const buttonAnimations = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
+
+  const tiny = height < 720;
+  const compact = height < 800;
+  const horizontalPadding = width < 380 ? 18 : 24;
+  const moduleTop = height * (tiny ? 0.515 : compact ? 0.53 : 0.54);
+  const moduleMaxWidth = Math.min(layout.maxWidth - 24, width - horizontalPadding * 2);
 
   useEffect(() => {
     if (restoreStarted.current) {
@@ -152,259 +99,126 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
       }
 
       setAssetReady(true);
-      Animated.parallel([
-        Animated.timing(heroFade, {
-          toValue: 1,
-          duration: 420,
-          useNativeDriver: true,
-        }),
-        Animated.stagger(
-          90,
-          buttonAnimations.map((value) =>
-            Animated.timing(value, {
-              toValue: 1,
-              duration: 380,
-              useNativeDriver: true,
-            }),
-          ),
-        ),
-      ]).start();
-
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(heartPulse, {
-            toValue: 1,
-            duration: 1600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(heartPulse, {
-            toValue: 0,
-            duration: 1600,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start();
+      Animated.timing(heroFade, {
+        toValue: 1,
+        duration: 420,
+        useNativeDriver: true,
+      }).start();
     });
 
     return () => {
       mounted = false;
       pulseAnimation.stop();
     };
-  }, [buttonAnimations, heartPulse, heroFade, loadingPulse]);
+  }, [heroFade, loadingPulse]);
 
-  const openSocialError = (title: string, message: string) => {
-    setSocialModalTitle(title);
-    setSocialModalMessage(message);
-    setSocialModalVisible(true);
-  };
-
-  const handleSocialAuth = async (provider: 'apple' | 'google') => {
-    if (socialAuthPending) {
-      return;
-    }
-
-    setSocialAuthPending(provider);
-
-    try {
-      const result = provider === 'apple' ? await signInWithApple() : await signInWithGoogle();
-
-      if (result.error || !result.data?.user) {
-        console.error(`[auth] ${provider} sign-in failed:`, result.error?.message ?? 'unknown error');
-        openSocialError(
-          provider === 'apple' ? 'Apple ile giris basarisiz' : 'Google ile giris basarisiz',
-          getFriendlyErrorMessage(result.error, 'Giriş tamamlanamadı. Lütfen tekrar deneyin.'),
-        );
-        return;
-      }
-
-      updateProfile({
-        email: result.data.user.email ?? profile.email,
-        username: result.data.profile?.username ?? profile.username,
-        plan: result.data.profile?.plan ?? profile.plan,
-        avatarId: result.data.profile?.avatarId ?? profile.avatarId,
-        isFrozen: result.data.profile?.isFrozen ?? profile.isFrozen,
-      });
-
-      navigation.reset({
-        index: 0,
-        routes: [{ name: result.data.profile?.isFrozen ? 'FrozenAccount' : 'Home' }],
-      });
-    } catch (error) {
-      console.error(`[auth] ${provider} sign-in crashed:`, getSafeErrorMessage(error));
-      openSocialError(
-        provider === 'apple' ? 'Apple ile giris basarisiz' : 'Google ile giris basarisiz',
-        'Beklenmeyen bir hata olustu. Lutfen tekrar dene.',
-      );
-    } finally {
-      setSocialAuthPending(null);
-    }
-  };
+  function openLogin() {
+    navigation.navigate('Login');
+  }
 
   return (
     <View style={styles.screen}>
-      <LinearGradient colors={['#050816', '#0B1025', '#120B29']} style={styles.background} />
+      <ImageBackground resizeMode="cover" source={welcomeBg} style={styles.background}>
+        <Animated.View style={[styles.imageFade, { opacity: heroFade }]} />
+        <View pointerEvents="none" style={styles.readabilityOverlay} />
 
-      {!assetReady || !sessionRestored ? (
-        <View pointerEvents="none" style={styles.loaderWrap}>
-          <Animated.View
-            style={[
-              styles.loaderGlow,
-              { opacity: loadingPulse, transform: [{ scale: loadingPulse }] },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.loaderCore,
-              {
-                opacity: loadingPulse.interpolate({
-                  inputRange: [0.5, 1],
-                  outputRange: [0.7, 1],
-                }),
-              },
-            ]}
-          />
-        </View>
-      ) : null}
-
-      <Animated.View
-        style={[
-          styles.background,
-          {
-            opacity: heroFade,
-          },
-        ]}>
-        <ImageBackground resizeMode="cover" source={welcomeBg} style={styles.background} />
-      </Animated.View>
-
-      <LinearGradient
-        colors={['rgba(4,6,18,0.08)', 'rgba(6,8,24,0.18)', 'rgba(8,10,28,0.84)']}
-        locations={[0, 0.48, 1]}
-        pointerEvents="none"
-        style={styles.overlay}
-      />
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.heartPulse,
-          {
-            opacity: heartPulse.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.16, 0.32],
-            }),
-            transform: [
-              {
-                scale: heartPulse.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.96, 1.08],
-                }),
-              },
-            ],
-          },
-        ]}
-      />
-
-      <View
-        style={[
-          styles.foreground,
-          { paddingBottom: Math.max(insets.bottom + 16, 24) },
-        ]}>
-        <View style={styles.actions}>
-          {[
-            <SplashActionButton
-              key="login"
-              disabled={socialAuthPending !== null}
-              onPress={() => navigation.navigate('Login')}
-              primary
-              title="Giris Yap"
-            />,
-            <SplashActionButton
-              key="register"
-              disabled={socialAuthPending !== null}
-              onPress={() => navigation.navigate('Register')}
-              title="Kayit Ol"
-            />,
-            <SplashActionButton
-              key="apple"
-              disabled={socialAuthPending !== null}
-              icon="logo-apple"
-              onPress={() => void handleSocialAuth('apple')}
-              title={
-                socialAuthPending === 'apple'
-                  ? 'Apple ile baglaniyor...'
-                  : 'Apple ile devam et'
-              }
-            />,
-            <SplashActionButton
-              key="google"
-              disabled={socialAuthPending !== null}
-              icon="logo-google"
-              onPress={() => void handleSocialAuth('google')}
-              title={
-                socialAuthPending === 'google'
-                  ? 'Google ile baglaniyor...'
-                  : 'Google ile devam et'
-              }
-            />,
-          ].map((button, index) => (
+        {!assetReady || !sessionRestored ? (
+          <View pointerEvents="none" style={styles.loaderWrap}>
             <Animated.View
-              key={index}
-              style={{
-                opacity: buttonAnimations[index],
-                transform: [
-                  {
-                    translateY: buttonAnimations[index].interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [18, 0],
-                    }),
-                  },
-                ],
-              }}>
-              {button}
-            </Animated.View>
-          ))}
-        </View>
+              style={[
+                styles.loaderGlow,
+                { opacity: loadingPulse, transform: [{ scale: loadingPulse }] },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.loaderCore,
+                {
+                  opacity: loadingPulse.interpolate({
+                    inputRange: [0.5, 1],
+                    outputRange: [0.7, 1],
+                  }),
+                },
+              ]}
+            />
+          </View>
+        ) : null}
 
-        <View style={styles.footer}>
-          <Text style={styles.privacy}>Gizliligin bizim icin onemli.</Text>
-          <Text style={styles.anonymous}>%100 anonimdir.</Text>
-        </View>
-      </View>
+        <View
+          style={[
+            styles.loginModule,
+            {
+              maxWidth: moduleMaxWidth,
+              paddingBottom: Math.max(insets.bottom, 8),
+              top: moduleTop,
+            },
+          ]}
+        >
+          <LinearGradient
+            colors={['rgba(9,12,34,0.48)', 'rgba(68,31,102,0.36)', 'rgba(9,12,34,0.48)']}
+            style={[styles.moduleGlass, { gap: tiny ? 5 : 6, padding: tiny ? 8 : 10 }]}
+          >
+            <View style={[styles.inputShell, { height: tiny ? 36 : 42 }]}>
+              <Ionicons color={colors.muted} name="person-circle-outline" size={20} />
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                onChangeText={setIdentifier}
+                placeholder="Telefon / E-posta"
+                placeholderTextColor="rgba(247,238,255,0.62)"
+                style={styles.input}
+                value={identifier}
+              />
+            </View>
 
-      <NoticeModal
-        actions={[
-          {
-            label: 'Tamam',
-            onPress: () => setSocialModalVisible(false),
-            variant: 'secondary',
-          },
-        ]}
-        message={socialModalMessage}
-        title={socialModalTitle}
-        visible={socialModalVisible}
-      />
+            <Pressable onPress={openLogin}>
+              <LinearGradient
+                colors={[...gradients.primary]}
+                end={{ x: 1, y: 0.5 }}
+                start={{ x: 0, y: 0.5 }}
+                style={[styles.primaryButton, { height: tiny ? 38 : 42 }]}
+              >
+                <Text style={styles.primaryButtonText}>Devam Et</Text>
+                <Ionicons color={colors.text} name="arrow-forward" size={18} />
+              </LinearGradient>
+            </Pressable>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>veya</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <View style={styles.secondaryRow}>
+              <Pressable onPress={openLogin} style={[styles.secondaryButton, { height: tiny ? 32 : 36 }]}>
+                <Text style={styles.secondaryButtonText}>Giriş Yap</Text>
+              </Pressable>
+              <Pressable onPress={() => navigation.navigate('Register')} style={[styles.secondaryButton, styles.registerButton, { height: tiny ? 32 : 36 }]}>
+                <Text style={styles.secondaryButtonText}>Kayıt Ol</Text>
+              </Pressable>
+            </View>
+          </LinearGradient>
+        </View>
+      </ImageBackground>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
+    backgroundColor: colors.backgroundDeep,
     flex: 1,
-    backgroundColor: '#060816',
   },
   background: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
   },
-  overlay: {
+  imageFade: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
-  heartPulse: {
-    position: 'absolute',
-    top: '18%',
-    alignSelf: 'center',
-    width: 210,
-    height: 210,
-    borderRadius: 105,
-    backgroundColor: 'rgba(148, 72, 255, 0.18)',
+  readabilityOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(3,5,18,0.08)',
   },
   loaderWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -412,87 +226,102 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loaderGlow: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
     backgroundColor: 'rgba(146, 72, 255, 0.18)',
+    borderRadius: 80,
+    height: 160,
+    width: 160,
   },
   loaderCore: {
-    position: 'absolute',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
     backgroundColor: 'rgba(255, 79, 185, 0.72)',
+    borderRadius: 26,
+    height: 52,
+    position: 'absolute',
     shadowColor: '#A35BFF',
+    shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.48,
     shadowRadius: 22,
-    shadowOffset: { width: 0, height: 0 },
+    width: 52,
   },
-  foreground: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 30,
-    paddingTop: 16,
-  },
-  actions: {
-    gap: 11,
-  },
-  buttonPressable: {
+  loginModule: {
+    alignSelf: 'center',
+    position: 'absolute',
     width: '100%',
   },
-  buttonPressed: {
-    opacity: 0.9,
+  moduleGlass: {
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowColor: colors.pink,
+    shadowOpacity: 0.24,
+    shadowRadius: 24,
+  },
+  inputShell: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(174,111,255,0.34)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  input: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    paddingVertical: 0,
   },
   primaryButton: {
-    minHeight: 54,
-    borderRadius: 20,
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
     justifyContent: 'center',
-    paddingHorizontal: 18,
-    shadowColor: '#9D51FF',
-    shadowOpacity: 0.34,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: colors.pink,
+    shadowOpacity: 0.38,
+    shadowRadius: 18,
+  },
+  primaryButtonText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  dividerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  dividerLine: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    color: 'rgba(247,238,255,0.72)',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   secondaryButton: {
-    minHeight: 54,
-    borderRadius: 20,
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-    backgroundColor: 'rgba(12, 14, 36, 0.54)',
-    borderWidth: 1,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
     borderColor: 'rgba(255,255,255,0.18)',
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  buttonIconSlot: {
-    width: 22,
-    alignItems: 'center',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
     justifyContent: 'center',
   },
-  buttonLabel: {
-    flex: 1,
+  registerButton: {
+    borderColor: 'rgba(255,79,185,0.32)',
+  },
+  secondaryButtonText: {
     color: colors.text,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  footer: {
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 16,
-  },
-  privacy: {
-    color: colors.muted,
-    textAlign: 'center',
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  anonymous: {
-    color: colors.cyan,
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
   },
 });
