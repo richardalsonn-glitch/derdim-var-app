@@ -1,32 +1,39 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { FormInput } from '../components/FormInput';
-import { GlassCard } from '../components/GlassCard';
-import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
-import { PremiumScreen } from '../components/PremiumScreen';
-import { ScreenHeader } from '../components/ScreenHeader';
-import { colors, spacing } from '../constants/theme';
+import { colors, gradients, layout, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
 import { restoreAuthProfile, signInWithEmail } from '../services/authService';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
+const loginBackground = require('../../assets/images/anasayfayeni12.png');
+
 export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
+  const { height, width } = useWindowDimensions();
   const { profile, updateProfile } = useAppState();
   const canGoBack = navigation.canGoBack();
-  const [email, setEmail] = useState(profile.email ?? 'gizli@derdimvar.app');
-  const [password, setPassword] = useState('12345678');
+  const [email, setEmail] = useState(profile.email ?? '');
+  const [password] = useState('12345678');
   const [errorMessage, setErrorMessage] = useState('');
   const [errorVisible, setErrorVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const tiny = height < 720;
+  const compact = height < 800;
+  const horizontalPadding = width < 380 ? 18 : 24;
+  const moduleTop = height * (tiny ? 0.515 : compact ? 0.53 : 0.54);
+  const moduleMaxWidth = Math.min(layout.maxWidth - 24, width - horizontalPadding * 2);
+
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
 
-    if (!trimmedEmail || !password.trim()) {
-      setErrorMessage('Lutfen e-posta ve sifre alanlarini doldur.');
+    if (!trimmedEmail) {
+      setErrorMessage('Lütfen telefon veya e-posta alanını doldur.');
       setErrorVisible(true);
       return;
     }
@@ -72,79 +79,188 @@ export function LoginScreen({ navigation }: AppScreenProps<'Login'>) {
   };
 
   return (
-    <PremiumScreen contentStyle={styles.screenContent}>
-      <ScreenHeader
-        onBack={canGoBack ? () => navigation.goBack() : undefined}
-        subtitle="Anonim ses odasina giris yap"
-        title="Giris Yap"
-      />
+    <ImageBackground resizeMode="cover" source={loginBackground} style={styles.background}>
+      <View pointerEvents="none" style={styles.readabilityOverlay} />
+      <SafeAreaView style={styles.safeArea}>
+        {canGoBack ? (
+          <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { left: horizontalPadding, top: tiny ? 8 : 10 }]}>
+            <Ionicons color={colors.text} name="chevron-back" size={24} />
+          </Pressable>
+        ) : null}
 
-      <GlassCard style={styles.card}>
-        <FormInput
-          autoCapitalize="none"
-          icon="mail-outline"
-          keyboardType="email-address"
-          label="E-posta"
-          onChangeText={setEmail}
-          placeholder="mail adresin"
-          value={email}
-        />
-        <FormInput
-          icon="eye-outline"
-          label="Sifre"
-          onChangeText={setPassword}
-          placeholder="********"
-          secureTextEntry
-          value={password}
-        />
-        <GradientButton
-          disabled={isSubmitting}
-          onPress={handleLogin}
-          title={isSubmitting ? 'Giris yapiliyor...' : 'Giris Yap'}
-        />
-      </GlassCard>
+        <View style={[styles.loginModule, { maxWidth: moduleMaxWidth, top: moduleTop }]}>
+          <LinearGradient
+            colors={['rgba(9,12,34,0.48)', 'rgba(68,31,102,0.36)', 'rgba(9,12,34,0.48)']}
+            style={[styles.moduleGlass, { gap: tiny ? 5 : 6, padding: tiny ? 8 : 10 }]}
+          >
+            <View style={[styles.inputShell, { height: tiny ? 36 : 42 }]}>
+              <Ionicons color={colors.muted} name="person-circle-outline" size={20} />
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                onChangeText={setEmail}
+                placeholder="Telefon / E-posta"
+                placeholderTextColor="rgba(247,238,255,0.62)"
+                style={styles.input}
+                value={email}
+              />
+            </View>
 
-      <Text style={styles.meta}>
-        Bu uygulama terapi hizmeti sunmaz; anonim sosyal destek ve dertlesme alani olarak
-        konumlanir.
-      </Text>
-      <Text style={styles.support}>Acil durumlarda profesyonel destek alman onemlidir.</Text>
+            <Pressable disabled={isSubmitting} onPress={handleLogin} style={isSubmitting && styles.disabled}>
+              <LinearGradient
+                colors={[...gradients.primary]}
+                end={{ x: 1, y: 0.5 }}
+                start={{ x: 0, y: 0.5 }}
+                style={[styles.primaryButton, { height: tiny ? 38 : 42 }]}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color={colors.text} size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>Devam Et</Text>
+                    <Ionicons color={colors.text} name="arrow-forward" size={18} />
+                  </>
+                )}
+              </LinearGradient>
+            </Pressable>
 
-      <Pressable onPress={() => navigation.navigate('Register')}>
-        <Text style={styles.link}>Hesabin yok mu? Kayit Ol</Text>
-      </Pressable>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>veya</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <View style={styles.secondaryRow}>
+              <Pressable disabled={isSubmitting} onPress={handleLogin} style={[styles.secondaryButton, { height: tiny ? 32 : 36 }]}>
+                <Text style={styles.secondaryButtonText}>Giriş Yap</Text>
+              </Pressable>
+              <Pressable onPress={() => navigation.navigate('Register')} style={[styles.secondaryButton, styles.registerButton, { height: tiny ? 32 : 36 }]}>
+                <Text style={styles.secondaryButtonText}>Kayıt Ol</Text>
+              </Pressable>
+            </View>
+          </LinearGradient>
+        </View>
+      </SafeAreaView>
 
       <NoticeModal
         actions={[
           { label: 'Tamam', onPress: () => setErrorVisible(false), variant: 'secondary' },
         ]}
-        message={errorMessage || 'Giris sirasinda bir hata olustu.'}
+        message={errorMessage || 'Giriş sırasında bir hata oluştu.'}
         title="Giriş tamamlanamadı"
         visible={errorVisible}
       />
-    </PremiumScreen>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    gap: spacing.md,
+  background: {
+    backgroundColor: colors.backgroundDeep,
+    flex: 1,
   },
-  screenContent: {
-    flexGrow: 1,
+  readabilityOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(3,5,18,0.08)',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(7,10,28,0.42)',
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 21,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    position: 'absolute',
+    width: 42,
+  },
+  loginModule: {
+    alignSelf: 'center',
+    paddingHorizontal: 0,
+    position: 'absolute',
+    width: '100%',
+  },
+  moduleGlass: {
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowColor: colors.pink,
+    shadowOpacity: 0.24,
+    shadowRadius: 24,
+  },
+  inputShell: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(174,111,255,0.34)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  input: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    paddingVertical: 0,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    shadowColor: colors.pink,
+    shadowOpacity: 0.38,
+    shadowRadius: 18,
+  },
+  primaryButtonText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  disabled: {
+    opacity: 0.72,
+  },
+  dividerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  dividerLine: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    color: 'rgba(247,238,255,0.72)',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
     justifyContent: 'center',
   },
-  meta: {
-    color: colors.muted,
-    lineHeight: 20,
+  registerButton: {
+    borderColor: 'rgba(255,79,185,0.32)',
   },
-  support: {
-    color: colors.dim,
-    lineHeight: 19,
-  },
-  link: {
-    color: colors.pink,
-    textAlign: 'center',
-    fontWeight: '700',
+  secondaryButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
   },
 });
