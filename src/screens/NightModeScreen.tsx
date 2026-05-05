@@ -87,17 +87,17 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const tiny = height < 720;
   const compact = height < 800;
   const horizontalPadding = width < 380 ? 12 : 16;
-  const contentGap = tiny ? 4 : compact ? 6 : 8;
-  const heroHeight = tiny ? 62 : compact ? 68 : 74;
-  const heroIconSize = tiny ? 34 : compact ? 38 : 42;
-  const cardHeight = tiny ? 176 : compact ? 188 : 202;
-  const miniSceneHeight = tiny ? 70 : compact ? 76 : 82;
-  const miniTableSize = tiny ? 28 : compact ? 31 : 34;
-  const miniSeatWidth = tiny ? 35 : 38;
-  const miniSeatHeight = tiny ? 28 : 30;
+  const contentGap = tiny ? 3 : compact ? 4 : 5;
+  const heroHeight = tiny ? 54 : compact ? 60 : 66;
+  const heroIconSize = tiny ? 30 : compact ? 34 : 38;
+  const cardHeight = tiny ? 202 : compact ? 216 : 234;
+  const miniSceneHeight = tiny ? 96 : compact ? 102 : 110;
+  const miniTableSize = tiny ? 28 : compact ? 30 : 32;
+  const miniSeatWidth = tiny ? 38 : 40;
+  const miniSeatHeight = tiny ? 30 : 32;
   const miniSeatSideTop = (miniSceneHeight - miniSeatHeight) / 2;
   const miniSeatInset = tiny ? -1 : -2;
-  const miniAvatarSize = tiny ? 16 : 18;
+  const miniAvatarSize = tiny ? 18 : 20;
 
   const loadRooms = useCallback(async (silent = false) => {
     if (!silent) {
@@ -298,7 +298,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
         <View style={styles.sectionMetaRow}>
           <View style={styles.sectionTitleWrap}>
             <View style={[styles.sectionIcon, paid ? styles.paidSectionIcon : styles.freeSectionIcon]}>
-              <Ionicons color={paid ? colors.goldSoft : colors.cyan} name={paid ? 'sparkles' : 'moon'} size={15} />
+              <Ionicons color={paid ? colors.goldSoft : colors.cyan} name={paid ? 'sparkles' : 'moon'} size={13} />
             </View>
             <Text style={styles.sectionTitle}>{title}</Text>
           </View>
@@ -317,7 +317,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             colors={selectedRoomType === 'free' ? ['rgba(69,224,255,0.34)', 'rgba(153,70,255,0.28)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.018)']}
             style={[styles.segmentButton, selectedRoomType === 'free' && styles.activeFreeSegment]}
           >
-            <Ionicons color={selectedRoomType === 'free' ? colors.cyan : colors.muted} name="moon" size={18} />
+            <Ionicons color={selectedRoomType === 'free' ? colors.cyan : colors.muted} name="moon" size={16} />
             <Text style={[styles.segmentText, selectedRoomType === 'free' && styles.activeSegmentText]}>Ücretsiz</Text>
           </LinearGradient>
         </Pressable>
@@ -326,7 +326,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             colors={selectedRoomType === 'paid' ? ['rgba(244,180,94,0.36)', 'rgba(255,79,185,0.24)', 'rgba(153,70,255,0.22)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.018)']}
             style={[styles.segmentButton, selectedRoomType === 'paid' && styles.activePaidSegment]}
           >
-            <Ionicons color={selectedRoomType === 'paid' ? colors.goldSoft : colors.muted} name="sparkles" size={18} />
+            <Ionicons color={selectedRoomType === 'paid' ? colors.goldSoft : colors.muted} name="sparkles" size={16} />
             <Text style={[styles.segmentText, selectedRoomType === 'paid' && styles.activeSegmentText]}>Ücretli</Text>
           </LinearGradient>
         </Pressable>
@@ -337,14 +337,14 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   return (
     <NightBackground>
       <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding, paddingTop: tiny ? 4 : 6 }]}>
-          <View style={[styles.header, { minHeight: tiny ? 42 : 48 }]}>
+        <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding, paddingTop: tiny ? 2 : 4 }]}>
+          <View style={[styles.header, { minHeight: tiny ? 38 : 44 }]}>
             <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: tiny ? 19 : 21, height: tiny ? 38 : 42, width: tiny ? 38 : 42 }]}>
               <Ionicons color={colors.text} name="chevron-back" size={tiny ? 24 : 26} />
             </Pressable>
             <View style={styles.headerCopy}>
-              <Text style={[styles.headerTitle, { fontSize: tiny ? 28 : compact ? 31 : 34 }]}>Gece Modu</Text>
-              <Text style={[styles.headerSubtitle, { fontSize: tiny ? 12 : 13 }]}>22:00 - 06:00 • Türkiye saati</Text>
+              <Text style={[styles.headerTitle, { fontSize: tiny ? 25 : compact ? 28 : 31 }]}>Gece Modu</Text>
+              <Text style={[styles.headerSubtitle, { fontSize: tiny ? 11 : 12 }]}>22:00 - 06:00 • Türkiye saati</Text>
             </View>
           </View>
 
@@ -360,13 +360,13 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             </LinearGradient>
           ) : (
             <>
-              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.heroCard, { minHeight: heroHeight, paddingHorizontal: tiny ? 9 : 11, paddingVertical: tiny ? 6 : 8 }]}>
+              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.heroCard, { minHeight: heroHeight, paddingHorizontal: tiny ? 8 : 10, paddingVertical: tiny ? 5 : 6 }]}>
                 <View style={[styles.heroIcon, { borderRadius: heroIconSize / 2, height: heroIconSize, width: heroIconSize }]}>
-                  <Ionicons color={colors.goldSoft} name="moon" size={tiny ? 20 : 22} />
+                  <Ionicons color={colors.goldSoft} name="moon" size={tiny ? 17 : 19} />
                 </View>
                 <View style={styles.heroCopy}>
-                  <Text style={[styles.heroTitle, { fontSize: tiny ? 16 : 17 }]}>Gece odaları</Text>
-                  <Text numberOfLines={1} style={[styles.heroText, { fontSize: tiny ? 11 : 12 }]}>Bir oda seç ve masaya otur.</Text>
+                  <Text style={[styles.heroTitle, { fontSize: tiny ? 14 : 15 }]}>Gece odaları</Text>
+                  <Text numberOfLines={1} style={[styles.heroText, { fontSize: tiny ? 10 : 11 }]}>Bir oda seç ve masaya otur.</Text>
                 </View>
                 <View style={styles.heroBadge}>
                   <Text style={styles.heroBadgeText}>8 oda</Text>
@@ -461,20 +461,20 @@ const styles = StyleSheet.create({
   heroText: {
     color: colors.muted,
     fontWeight: '700',
-    lineHeight: 16,
-    marginTop: 2,
+    lineHeight: 14,
+    marginTop: 1,
   },
   heroBadge: {
     backgroundColor: 'rgba(153,70,255,0.34)',
     borderColor: 'rgba(255,79,185,0.48)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   heroBadgeText: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
   },
   segmentWrap: {
@@ -483,8 +483,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 5,
-    padding: 4,
+    gap: 4,
+    padding: 3,
     shadowColor: colors.purple,
     shadowOpacity: 0.18,
     shadowRadius: 18,
@@ -498,8 +498,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 7,
-    height: 36,
+    gap: 6,
+    height: 32,
     justifyContent: 'center',
   },
   activeFreeSegment: {
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     color: colors.muted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
   },
   activeSegmentText: {
@@ -525,9 +525,9 @@ const styles = StyleSheet.create({
   section: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    gap: 5,
+    gap: 4,
     overflow: 'hidden',
-    padding: 7,
+    padding: 5,
     position: 'relative',
   },
   freeSection: {
@@ -553,22 +553,22 @@ const styles = StyleSheet.create({
   sectionMetaRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 6,
     justifyContent: 'space-between',
   },
   sectionTitleWrap: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     minWidth: 0,
   },
   sectionIcon: {
     alignItems: 'center',
-    borderRadius: 17,
+    borderRadius: 13,
     borderWidth: 1,
-    height: 28,
+    height: 24,
     justifyContent: 'center',
-    width: 28,
+    width: 24,
   },
   freeSectionIcon: {
     backgroundColor: 'rgba(69,224,255,0.12)',
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     flexShrink: 1,
   },
@@ -595,17 +595,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 9,
+    rowGap: 7,
   },
   roomPressable: {
-    width: '48%',
+    width: '49%',
   },
   roomCard: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     minHeight: 0,
     overflow: 'hidden',
-    padding: 10,
+    padding: 11,
   },
   freeRoomCard: {
     borderColor: 'rgba(69,224,255,0.5)',
@@ -656,19 +656,19 @@ const styles = StyleSheet.create({
   roomName: {
     color: colors.text,
     flex: 1,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
   },
   roomCount: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
-    marginTop: 5,
+    gap: 6,
+    marginTop: 6,
   },
   roomTag: {
     backgroundColor: 'rgba(69,224,255,0.12)',
@@ -676,10 +676,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     color: colors.cyan,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
     overflow: 'hidden',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 3,
   },
   paidTag: {
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 116,
     justifyContent: 'center',
-    marginTop: 7,
+    marginTop: 8,
     position: 'relative',
   },
   miniTable: {
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
   },
   emptyMiniSeatText: {
     color: colors.muted,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
   },
   roomCardFooter: {
@@ -768,17 +768,17 @@ const styles = StyleSheet.create({
   timePill: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 4,
+    gap: 5,
   },
   timeText: {
     color: colors.muted,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
   },
   priceText: {
     color: colors.goldSoft,
     flexShrink: 1,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
     textAlign: 'right',
   },
@@ -788,9 +788,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(126,135,255,0.7)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 32,
+    height: 34,
     justifyContent: 'center',
-    marginTop: 6,
+    marginTop: 7,
   },
   paidInlineButton: {
     backgroundColor: 'rgba(244,180,94,0.13)',
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
   },
   inlineButtonText: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
   },
   closedCard: {
