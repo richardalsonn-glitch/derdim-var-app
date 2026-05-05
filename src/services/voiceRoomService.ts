@@ -1,4 +1,5 @@
 import { defaultProfile } from '../data/mockData';
+import { logSafeError } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { VoiceRoom, VoiceRoomJoinRequest, VoiceRoomMember, VoiceRoomPricingType, VoiceRoomStatus, VoiceRoomType } from '../types';
 
@@ -200,6 +201,91 @@ export async function fetchNightVoiceRooms(): Promise<ServiceResult<VoiceRoom[]>
   } catch {
     return { data: null, error: genericError };
   }
+}
+
+export async function fetchNightVoiceRoom(roomId: string): Promise<ServiceResult<VoiceRoom>> {
+  const result = await fetchNightVoiceRooms();
+
+  if (result.error || !result.data) {
+    return { data: null, error: result.error ?? genericError };
+  }
+
+  const room = result.data.find((item) => item.id === roomId);
+
+  if (!room) {
+    return { data: null, error: { message: 'Oda şu anda kullanılamıyor.' } };
+  }
+
+  return { data: room, error: null };
+}
+
+function removeExistingRealtimeChannels(topic: string) {
+  const existingChannels = supabase.getChannels().filter((channel) => channel.topic === topic || channel.topic === `realtime:${topic}`);
+
+  existingChannels.forEach((channel) => {
+    void supabase.removeChannel(channel);
+  });
+}
+
+function subscribeWithFallback(channel: ReturnType<typeof supabase.channel>, scope: string) {
+  try {
+    return channel.subscribe((status, error) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        logSafeError(scope, error ?? status);
+      }
+    });
+  } catch (error) {
+    logSafeError(scope, error);
+    return null;
+  }
+}
+
+export function subscribeToNightVoiceRoomsLobby(onChange: () => void) {
+  if (!isSupabaseConfigured) {
+    return () => undefined;
+  }
+
+  const topic = 'realtime:night-voice-rooms-lobby';
+  removeExistingRealtimeChannels(topic);
+
+  const channel = subscribeWithFallback(
+    supabase
+      .channel(topic)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_rooms' }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_members' }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_join_requests' }, onChange),
+    '[voice-room] lobby realtime',
+  );
+
+  return () => {
+    if (channel) {
+      void supabase.removeChannel(channel);
+    }
+  };
+}
+
+export function subscribeToNightVoiceRoom(roomId: string, onChange: () => void) {
+  if (!isSupabaseConfigured) {
+    return () => undefined;
+  }
+
+  const topic = `realtime:night-room-${roomId}`;
+  removeExistingRealtimeChannels(topic);
+
+  const channel = subscribeWithFallback(
+    supabase
+      .channel(topic)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_rooms', filter: `id=eq.${roomId}` }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_members', filter: `room_id=eq.${roomId}` }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_join_requests', filter: `room_id=eq.${roomId}` }, onChange),
+    '[voice-room] room realtime',
+  );
+
+  return () => {
+    if (channel) {
+      void supabase.removeChannel(channel);
+    }
+  };
 }
 
 async function callRoomRpc(functionName: string, params: Record<string, unknown>): Promise<ServiceResult<true>> {

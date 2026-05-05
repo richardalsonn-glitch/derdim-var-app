@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { Avatar } from '../components/Avatar';
 import { GlassCard } from '../components/GlassCard';
@@ -8,24 +9,18 @@ import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { isDemoMode, isLiveKitEnabled } from '../config/features';
+import { isDemoMode } from '../config/features';
 import { colors, radius, spacing } from '../constants/theme';
 import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
-import { requestMicrophonePermission } from '../services/permissionsService';
 import {
-  decidePaidVoiceRoomRequest,
-  expireVoiceRoom,
   fetchNightVoiceRooms,
   getCurrentUserId,
   joinVoiceRoomSeat,
-  leaveVoiceRoom,
-  removeVoiceRoomMember,
-  renameVoiceRoom,
   requestPaidVoiceRoomJoin,
-  setVoiceRoomMemberAudio,
+  subscribeToNightVoiceRoomsLobby,
 } from '../services/voiceRoomService';
-import { VoiceRoom, VoiceRoomMember } from '../types';
+import { VoiceRoom } from '../types';
 import { getNightModeSubtitle, isNightModeOpen, NIGHT_MODE_CLOSED_MESSAGE } from '../utils/nightMode';
 
 type ModalState = {
@@ -33,21 +28,19 @@ type ModalState = {
   message: string;
 };
 
-function formatRemaining(ms: number, paid: boolean) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (paid) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+function formatShortTime(room: VoiceRoom, nowMs: number) {
+  if (!room.expiresAt) {
+    return room.pricingType === 'paid' ? '3 saat' : '30 dk';
   }
 
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
+  const remainingSeconds = Math.max(0, Math.floor((new Date(room.expiresAt).getTime() - nowMs) / 1000));
+  const minutes = Math.floor(remainingSeconds / 60);
 
-function getRoomRemainingMs(room: VoiceRoom, nowMs: number) {
-  return room.expiresAt ? new Date(room.expiresAt).getTime() - nowMs : null;
+  if (minutes >= 60) {
+    return `${Math.floor(minutes / 60)} sa ${minutes % 60} dk`;
+  }
+
+  return `${minutes} dk`;
 }
 
 function getRoomStateText(room: VoiceRoom) {
@@ -55,11 +48,7 @@ function getRoomStateText(room: VoiceRoom) {
     return 'Dolu';
   }
 
-  if (room.status === 'active') {
-    return 'Aktif';
-  }
-
-  return 'Açık';
+  return room.status === 'active' ? 'Aktif' : 'Açık';
 }
 
 function getFreeSeat(room: VoiceRoom) {
@@ -73,23 +62,13 @@ function getFreeSeat(room: VoiceRoom) {
 }
 
 export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
-  const glow = useRef(new Animated.Value(0.74)).current;
   const [rooms, setRooms] = useState<VoiceRoom[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
-  const [nameEditorVisible, setNameEditorVisible] = useState(false);
-  const [draftRoomName, setDraftRoomName] = useState('');
-  const [lastPaidWarningKey, setLastPaidWarningKey] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
   const nightOpen = isDemoMode || isNightModeOpen();
-  const selectedRoom = rooms.find((room) => room.id === selectedRoomId) ?? null;
-  const currentMembership = selectedRoom?.members.find((member) => member.userId === currentUserId) ?? null;
-  const isOwner = Boolean(selectedRoom?.ownerId && selectedRoom.ownerId === currentUserId);
-  const firstFreeMember = selectedRoom?.members.slice().sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
-  const canRenameSelectedRoom = Boolean(selectedRoom && (isOwner || (selectedRoom.pricingType === 'free' && firstFreeMember?.userId === currentUserId)));
 
   const loadRooms = useCallback(async (silent = false) => {
     if (!silent) {
@@ -114,95 +93,32 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     void loadRooms();
   }, [loadRooms]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowMs(Date.now());
-      void loadRooms(true);
-    }, 12000);
+  useEffect(() => subscribeToNightVoiceRoomsLobby(() => void loadRooms(true)), [loadRooms]);
 
-    return () => clearInterval(timer);
+  useEffect(() => {
+    const refreshTimer = setInterval(() => {
+      void loadRooms(true);
+    }, 10000);
+
+    return () => clearInterval(refreshTimer);
   }, [loadRooms]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    const timer = setInterval(() => setNowMs(Date.now()), 30000);
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0.74, duration: 1200, useNativeDriver: true }),
-      ]),
-    );
+  const freeRooms = useMemo(() => rooms.filter((room) => room.pricingType === 'free').slice(0, 5), [rooms]);
+  const paidRooms = useMemo(() => rooms.filter((room) => room.pricingType === 'paid').slice(0, 5), [rooms]);
 
-    animation.start();
-    return () => animation.stop();
-  }, [glow]);
+  async function handleRoomPress(room: VoiceRoom) {
+    const isMember = room.members.some((member) => member.userId === currentUserId);
 
-  useEffect(() => {
-    if (!selectedRoom?.expiresAt) {
+    if (isMember) {
+      navigation.navigate('NightRoom', { roomId: room.id });
       return;
     }
 
-    const remainingMs = getRoomRemainingMs(selectedRoom, nowMs);
-
-    if (remainingMs === null) {
-      return;
-    }
-
-    if (remainingMs <= 0) {
-      void expireVoiceRoom(selectedRoom.id).then(() => {
-        setSelectedRoomId(null);
-        setModal({ title: 'Oda kapandı', message: 'Oda süresi doldu.' });
-        void loadRooms(true);
-      });
-      return;
-    }
-
-    if (selectedRoom.pricingType !== 'paid') {
-      return;
-    }
-
-    const warningKey = remainingMs <= 60000 ? `${selectedRoom.id}:one` : remainingMs <= 300000 ? `${selectedRoom.id}:five` : null;
-
-    if (warningKey && warningKey !== lastPaidWarningKey) {
-      setLastPaidWarningKey(warningKey);
-      setModal({
-        title: remainingMs <= 60000 ? 'Son 1 dakika' : 'Son 5 dakika',
-        message: 'Oda yenileme mağaza içi satın alma ile yakında aktif olacak.',
-      });
-
-      if (remainingMs > 60000) {
-        setTimeout(() => {
-          setModal((current) => (current?.title === 'Son 5 dakika' ? null : current));
-        }, 30000);
-      }
-    }
-  }, [lastPaidWarningKey, loadRooms, nowMs, selectedRoom]);
-
-  const freeRooms = useMemo(() => rooms.filter((room) => room.pricingType === 'free'), [rooms]);
-  const paidRooms = useMemo(() => rooms.filter((room) => room.pricingType === 'paid'), [rooms]);
-
-  async function runRoomAction(action: () => Promise<{ data: true | null; error: { message: string } | null }>, successMessage?: string) {
-    setBusy(true);
-    const result = await action();
-    setBusy(false);
-
-    if (result.error) {
-      setModal({ title: 'İşlem tamamlanamadı', message: result.error.message });
-      return false;
-    }
-
-    if (successMessage) {
-      setModal({ title: 'Tamam', message: successMessage });
-    }
-
-    await loadRooms(true);
-    return true;
-  }
-
-  async function handleJoinSeat(room: VoiceRoom, seatIndex: number) {
     if (!currentUserId) {
       setModal({ title: 'Giriş gerekli', message: 'Gece Modu odalarına katılmak için giriş yapman gerekiyor.' });
       return;
@@ -213,279 +129,134 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
       return;
     }
 
-    await runRoomAction(() => joinVoiceRoomSeat(room.id, seatIndex));
-    setSelectedRoomId(room.id);
-  }
-
-  async function handlePaidRequest(room: VoiceRoom) {
-    if (!room.ownerId) {
-      setModal({
-        title: 'Ücretli Oda Aç',
-        message: '79.99 TL ücretli oda açma ve mağaza içi satın alma yakında aktif olacak. Plus üyeler için aylık 2, VIP üyeler için aylık 3 ücretsiz hak alanı hazırlandı.',
-      });
-      return;
-    }
-
-    await runRoomAction(() => requestPaidVoiceRoomJoin(room.id), 'İsteğin oda sahibine gönderildi.');
-  }
-
-  async function handleToggleAudio(member: VoiceRoomMember) {
-    if (!selectedRoom) {
-      return;
-    }
-
-    if (isLiveKitEnabled && !member.micEnabled) {
-      const result = await requestMicrophonePermission();
-
-      if (!result.granted) {
-        setModal({ title: 'Mikrofon izni gerekli', message: 'Mikrofonu açmak için izin vermen gerekiyor.' });
+    if (room.pricingType === 'paid') {
+      if (!room.ownerId) {
+        setModal({
+          title: 'Ücretli Oda',
+          message: '79,99 TL / oda. Mağaza içi satın alma yakında aktif olacak.',
+        });
         return;
       }
-    }
 
-    await runRoomAction(() => setVoiceRoomMemberAudio(selectedRoom.id, member.userId, !member.micEnabled, !member.speakerEnabled));
-  }
+      setBusyRoomId(room.id);
+      const result = await requestPaidVoiceRoomJoin(room.id);
+      setBusyRoomId(null);
 
-  async function handleRename() {
-    if (!selectedRoom) {
+      if (result.error) {
+        setModal({ title: 'İşlem tamamlanamadı', message: result.error.message });
+        return;
+      }
+
+      setModal({ title: 'İstek gönderildi', message: 'İsteğin oda sahibine iletildi.' });
+      await loadRooms(true);
       return;
     }
 
-    const name = draftRoomName.trim() || 'Şu anda bu oda müsaittir';
-    const success = await runRoomAction(() => renameVoiceRoom(selectedRoom.id, name));
+    const seat = getFreeSeat(room);
 
-    if (success) {
-      setNameEditorVisible(false);
+    if (seat === null) {
+      setModal({ title: 'Oda dolu', message: 'Bu odada şu an boş koltuk yok.' });
+      return;
     }
+
+    setBusyRoomId(room.id);
+    const result = await joinVoiceRoomSeat(room.id, seat);
+    setBusyRoomId(null);
+
+    if (result.error) {
+      setModal({ title: 'İşlem tamamlanamadı', message: result.error.message });
+      return;
+    }
+
+    navigation.navigate('NightRoom', { roomId: room.id });
+  }
+
+  function renderMiniSeat(room: VoiceRoom, seatIndex: number) {
+    const member = room.members.find((item) => item.seatIndex === seatIndex);
+    const seatPositionStyle = [styles.miniSeatTop, styles.miniSeatRight, styles.miniSeatBottom, styles.miniSeatLeft][seatIndex];
+
+    return (
+      <View key={seatIndex} style={[styles.miniSeat, seatPositionStyle, member && styles.filledMiniSeat]}>
+        {member ? (
+          <Avatar avatar={getAvatarById(member.avatarId)} size={24} />
+        ) : (
+          <>
+            <Ionicons color={colors.dim} name="ellipse-outline" size={14} />
+            <Text style={styles.emptyMiniSeatText}>Boş</Text>
+          </>
+        )}
+      </View>
+    );
   }
 
   function renderRoomCard(room: VoiceRoom) {
-    const remainingMs = getRoomRemainingMs(room, nowMs);
-    const remainingText = remainingMs === null ? 'Süre bekliyor' : formatRemaining(remainingMs, room.pricingType === 'paid');
+    const isPaid = room.pricingType === 'paid';
     const isFull = room.currentCount >= room.capacity || room.status === 'full';
     const isMember = room.members.some((member) => member.userId === currentUserId);
     const hasPendingRequest = room.requests.some((request) => request.requesterId === currentUserId && request.status === 'pending');
-    const buttonTitle =
-      room.pricingType === 'free'
-        ? isFull && !isMember
-          ? 'Dolu'
-          : isMember
-            ? 'Odaya Gir'
-            : 'Otur'
-        : isFull && !isMember
-          ? 'Dolu'
-          : isMember
-            ? 'Odaya Gir'
-            : hasPendingRequest
-              ? 'İstek Gönderildi'
-              : room.ownerId
-                ? 'İstek Gönder'
-                : 'Ücretli Oda Aç';
+    const buttonTitle = isMember ? 'Gir' : isFull ? 'Dolu' : isPaid && room.ownerId ? (hasPendingRequest ? 'Bekliyor' : 'İstek') : 'Otur';
 
     return (
-      <GlassCard key={room.id} style={styles.roomCard}>
-        <View style={styles.roomHeaderRow}>
-          <View style={styles.roomTitleBlock}>
-            <Text style={styles.roomName}>{room.name}</Text>
-            <View style={styles.badgeRow}>
-              <Text style={[styles.badge, room.pricingType === 'paid' && styles.goldBadge]}>{room.pricingType === 'paid' ? 'Ücretli' : 'Ücretsiz'}</Text>
-              <Text style={styles.badge}>{getRoomStateText(room)}</Text>
-            </View>
-          </View>
-          <Text style={styles.countText}>{room.currentCount}/{room.capacity}</Text>
-        </View>
-
-        <View style={styles.roomMetaRow}>
-          <Ionicons color={colors.cyan} name="time" size={15} />
-          <Text style={styles.roomMetaText}>{remainingText}</Text>
-          <Ionicons color={colors.muted} name={room.ownerId ? 'person' : 'ellipse-outline'} size={15} />
-          <Text style={styles.roomMetaText}>{room.ownerId ? 'Sahipli oda' : 'Boş oda'}</Text>
-        </View>
-
-        <GradientButton
-          compact
-          disabled={busy || hasPendingRequest || (isFull && !isMember)}
-          icon={room.pricingType === 'paid' && !isMember ? 'mail' : 'enter'}
-          onPress={() => {
-            if (isMember) {
-              setSelectedRoomId(room.id);
-              return;
-            }
-
-            if (room.pricingType === 'paid') {
-              void handlePaidRequest(room);
-              return;
-            }
-
-            const seat = getFreeSeat(room);
-            if (seat === null) {
-              setModal({ title: 'Oda dolu', message: 'Bu odada şu an boş koltuk yok.' });
-              return;
-            }
-
-            setSelectedRoomId(room.id);
-          }}
-          title={buttonTitle}
-          variant={room.pricingType === 'paid' ? 'gold' : 'secondary'}
-        />
-      </GlassCard>
-    );
-  }
-
-  function renderLobby() {
-    return (
-      <>
-        <GlassCard style={styles.banner}>
-          <Text style={styles.bannerTitle}>4 kişilik gerçek odalar</Text>
-          <Text style={styles.bannerText}>Boş koltuklar boş görünür. Oda dolana kadar ücretsiz odalarda mikrofon ve hoparlör kapalı kalır.</Text>
-        </GlassCard>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Ücretsiz Odalar</Text>
-          <Text style={styles.sectionMeta}>5 oda</Text>
-        </View>
-        {freeRooms.map(renderRoomCard)}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Ücretli Odalar</Text>
-          <Text style={styles.sectionMeta}>79.99 TL placeholder</Text>
-        </View>
-        {paidRooms.map(renderRoomCard)}
-      </>
-    );
-  }
-
-  function renderSeat(room: VoiceRoom, seatIndex: number) {
-    const member = room.members.find((item) => item.seatIndex === seatIndex);
-    const isSpeaker = Boolean(member?.micEnabled || member?.speakerEnabled);
-
-    if (!member) {
-      return (
-        <Pressable
-          key={seatIndex}
-          disabled={busy || room.pricingType === 'paid'}
-          onPress={() => void handleJoinSeat(room, seatIndex)}
-          style={[styles.seatCard, styles.emptySeat, room.pricingType === 'paid' && styles.disabledSeat]}
+      <Pressable
+        key={room.id}
+        disabled={busyRoomId === room.id || hasPendingRequest || (isFull && !isMember)}
+        onPress={() => void handleRoomPress(room)}
+        style={styles.roomPressable}
+      >
+        <LinearGradient
+          colors={isPaid ? ['rgba(244,180,94,0.18)', 'rgba(20,24,60,0.72)'] : ['rgba(69,224,255,0.12)', 'rgba(20,24,60,0.72)']}
+          style={[styles.compactRoomCard, isFull && styles.fullRoomCard]}
         >
-          <Ionicons color={colors.dim} name="add-circle-outline" size={26} />
-          <Text style={styles.emptySeatText}>Boş</Text>
-        </Pressable>
-      );
-    }
-
-    return (
-      <Animated.View key={seatIndex} style={[styles.seatCard, isSpeaker && { opacity: glow }, isSpeaker && styles.speakingSeat]}>
-        <Avatar avatar={getAvatarById(member.avatarId)} size={66} />
-        <Text numberOfLines={1} style={styles.memberName}>{member.username}</Text>
-        <View style={styles.audioRow}>
-          <Ionicons color={member.micEnabled ? colors.cyan : colors.dim} name={member.micEnabled ? 'mic' : 'mic-off'} size={14} />
-          <Ionicons color={member.speakerEnabled ? colors.green : colors.dim} name={member.speakerEnabled ? 'volume-high' : 'volume-mute'} size={14} />
-        </View>
-        {isOwner && member.userId !== currentUserId ? (
-          <View style={styles.ownerControls}>
-            <Pressable onPress={() => void handleToggleAudio(member)} style={styles.iconButton}>
-              <Ionicons color={colors.text} name="options" size={15} />
-            </Pressable>
-            <Pressable onPress={() => void runRoomAction(() => removeVoiceRoomMember(room.id, member.userId))} style={styles.iconButton}>
-              <Ionicons color={colors.danger} name="close" size={15} />
-            </Pressable>
+          <View style={styles.compactHeader}>
+            <View style={styles.compactTitleBlock}>
+              <Text numberOfLines={1} style={styles.compactRoomName}>{room.name}</Text>
+              <View style={styles.tagRow}>
+                <Text style={[styles.roomTag, isPaid && styles.paidTag]}>{isPaid ? 'Ücretli' : 'Ücretsiz'}</Text>
+                <Text style={[styles.roomTag, isFull && styles.fullTag]}>{getRoomStateText(room)}</Text>
+              </View>
+            </View>
+            <Text style={styles.compactCount}>{room.currentCount}/{room.capacity}</Text>
           </View>
-        ) : null}
-      </Animated.View>
+
+          <View style={styles.miniRoomScene}>
+            <View style={[styles.miniTable, isPaid && styles.paidMiniTable]}>
+              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={16} />
+            </View>
+            {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index))}
+          </View>
+
+          <View style={styles.compactFooter}>
+            <View style={styles.timePill}>
+              <Ionicons color={colors.muted} name="time" size={12} />
+              <Text style={styles.timeText}>{formatShortTime(room, nowMs)}</Text>
+            </View>
+            {isPaid ? <Text style={styles.priceText}>79,99 TL / oda</Text> : null}
+            <View style={[styles.inlineButton, isPaid && styles.paidInlineButton, (isFull && !isMember) && styles.disabledInlineButton]}>
+              {busyRoomId === room.id ? <ActivityIndicator color={colors.text} size="small" /> : <Text style={styles.inlineButtonText}>{buttonTitle}</Text>}
+            </View>
+          </View>
+        </LinearGradient>
+      </Pressable>
     );
   }
 
-  function renderSelectedRoom(room: VoiceRoom) {
-    const remainingMs = getRoomRemainingMs(room, nowMs);
-    const isFreeWaiting = room.pricingType === 'free' && room.currentCount < room.capacity;
-    const timerText = remainingMs === null ? (room.pricingType === 'paid' ? '3:00:00' : '30:00') : formatRemaining(remainingMs, room.pricingType === 'paid');
-
+  function renderSection(title: string, subtitle: string, sectionRooms: VoiceRoom[]) {
     return (
-      <>
-        <GlassCard style={styles.roomDetailHeader}>
-          <View style={styles.roomHeaderRow}>
-            <View style={styles.roomTitleBlock}>
-              <Text style={styles.roomName}>{room.name}</Text>
-              <Text style={styles.roomMetaText}>{room.pricingType === 'paid' ? 'Ücretli oda' : 'Ücretsiz oda'} • {room.currentCount}/{room.capacity}</Text>
-            </View>
-            <Text style={styles.timerText}>{timerText}</Text>
-          </View>
-          <View style={styles.detailActions}>
-            {canRenameSelectedRoom ? (
-              <GradientButton
-                compact
-                icon="create"
-                onPress={() => {
-                  setDraftRoomName(room.name);
-                  setNameEditorVisible(true);
-                }}
-                title="Oda Adı"
-                variant="ghost"
-              />
-            ) : null}
-            {currentMembership ? (
-              <GradientButton compact icon="exit" onPress={() => void runRoomAction(() => leaveVoiceRoom(room.id)).then(() => setSelectedRoomId(null))} title="Çık" variant="ghost" />
-            ) : null}
-          </View>
-        </GlassCard>
-
-        {isFreeWaiting ? (
-          <GlassCard style={styles.waitingCard}>
-            <Ionicons color={colors.goldSoft} name="lock-closed" size={18} />
-            <Text style={styles.waitingText}>4 kişi tamamlanınca konuşma başlayacak.</Text>
-          </GlassCard>
-        ) : null}
-
-        <View style={styles.seatGrid}>
-          {Array.from({ length: room.capacity }).map((_, index) => renderSeat(room, index))}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.sectionMeta}>{subtitle}</Text>
         </View>
-
-        {isOwner && room.requests.length > 0 ? (
-          <GlassCard style={styles.requestsCard}>
-            <Text style={styles.sectionTitle}>İstek Listesi</Text>
-            {room.requests.map((request) => (
-              <View key={request.id} style={styles.requestRow}>
-                <View style={styles.requestUser}>
-                  <Avatar avatar={getAvatarById(request.requesterAvatarId)} size={38} />
-                  <Text style={styles.requestName}>{request.requesterUsername}</Text>
-                </View>
-                <View style={styles.requestActions}>
-                  <Pressable onPress={() => void runRoomAction(() => decidePaidVoiceRoomRequest(request.id, true))} style={styles.iconButton}>
-                    <Ionicons color={colors.green} name="checkmark" size={16} />
-                  </Pressable>
-                  <Pressable onPress={() => void runRoomAction(() => decidePaidVoiceRoomRequest(request.id, false))} style={styles.iconButton}>
-                    <Ionicons color={colors.danger} name="close" size={16} />
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </GlassCard>
-        ) : null}
-
-        {room.pricingType === 'paid' ? (
-          <GlassCard style={styles.waitingCard}>
-            <Ionicons color={colors.goldSoft} name="card" size={18} />
-            <Text style={styles.waitingText}>Oda yenileme mağaza içi satın alma ile yakında aktif olacak.</Text>
-          </GlassCard>
-        ) : null}
-      </>
+        <View style={styles.roomGrid}>
+          {sectionRooms.map(renderRoomCard)}
+        </View>
+      </View>
     );
   }
 
   return (
-    <PremiumScreen>
-      <ScreenHeader
-        onBack={() => {
-          if (selectedRoom) {
-            setSelectedRoomId(null);
-            return;
-          }
-
-          navigation.goBack();
-        }}
-        subtitle={getNightModeSubtitle(isDemoMode)}
-        title={selectedRoom ? 'Gece Modu Odası' : 'Gece Modu'}
-      />
+    <PremiumScreen contentStyle={styles.content}>
+      <ScreenHeader onBack={() => navigation.goBack()} subtitle={getNightModeSubtitle(isDemoMode)} title="Gece Modu" />
 
       {!nightOpen ? (
         <GlassCard style={styles.closedCard}>
@@ -495,12 +266,23 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
       ) : loading ? (
         <GlassCard style={styles.loadingCard}>
           <ActivityIndicator color={colors.cyan} />
-          <Text style={styles.bannerText}>Odalar hazırlanıyor...</Text>
+          <Text style={styles.loadingText}>Odalar hazırlanıyor...</Text>
         </GlassCard>
-      ) : selectedRoom ? (
-        renderSelectedRoom(selectedRoom)
       ) : (
-        renderLobby()
+        <>
+          <View style={styles.heroStrip}>
+            <View>
+              <Text style={styles.heroTitle}>Gece odaları</Text>
+              <Text style={styles.heroText}>Masa çevresindeki koltuklardan birini seç.</Text>
+            </View>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>10 oda</Text>
+            </View>
+          </View>
+
+          {renderSection('Ücretsiz Odalar', '4 kişi dolunca konuşma başlar', freeRooms)}
+          {renderSection('Ücretli Odalar', 'Sahipli oda, istekle katılım', paidRooms)}
+        </>
       )}
 
       <NoticeModal
@@ -510,42 +292,49 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
         title={modal?.title ?? ''}
         visible={Boolean(modal)}
       />
-
-      <NoticeModal
-        actions={[
-          { label: 'Kaydet', onPress: handleRename },
-          { label: 'Vazgeç', onPress: () => setNameEditorVisible(false), variant: 'ghost' },
-        ]}
-        message="Oda adı en fazla 48 karakter olabilir."
-        onClose={() => setNameEditorVisible(false)}
-        title="Oda Adı"
-        visible={nameEditorVisible}
-      >
-        <TextInput
-          maxLength={48}
-          onChangeText={setDraftRoomName}
-          placeholder="Oda adı"
-          placeholderTextColor={colors.dim}
-          style={styles.nameInput}
-          value={draftRoomName}
-        />
-      </NoticeModal>
     </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  banner: {
-    gap: 6,
+  content: {
+    gap: spacing.sm,
   },
-  bannerTitle: {
+  heroStrip: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+  },
+  heroTitle: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
   },
-  bannerText: {
+  heroText: {
     color: colors.muted,
-    lineHeight: 20,
+    fontSize: 13,
+    marginTop: 3,
+  },
+  heroBadge: {
+    backgroundColor: 'rgba(153,70,255,0.24)',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  heroBadgeText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  section: {
+    gap: spacing.sm,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -555,170 +344,177 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '900',
   },
   sectionMeta: {
     color: colors.muted,
+    flexShrink: 1,
     fontSize: 12,
+    textAlign: 'right',
   },
-  roomCard: {
-    gap: spacing.sm,
-  },
-  roomHeaderRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-  },
-  roomTitleBlock: {
-    flex: 1,
-    gap: 8,
-  },
-  roomName: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  badge: {
-    backgroundColor: 'rgba(69, 224, 255, 0.12)',
-    borderColor: 'rgba(69, 224, 255, 0.22)',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    color: colors.cyan,
-    fontSize: 12,
-    fontWeight: '700',
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  goldBadge: {
-    backgroundColor: 'rgba(244, 180, 94, 0.14)',
-    borderColor: 'rgba(244, 180, 94, 0.3)',
-    color: colors.goldSoft,
-  },
-  countText: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  roomMetaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
-  roomMetaText: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  roomDetailHeader: {
-    gap: spacing.md,
-  },
-  detailActions: {
-    gap: spacing.sm,
-  },
-  timerText: {
-    color: colors.goldSoft,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  waitingCard: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  waitingText: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  seatGrid: {
+  roomGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: spacing.sm,
   },
-  seatCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
+  roomPressable: {
+    width: '48.5%',
+  },
+  compactRoomCard: {
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: 7,
-    minHeight: 178,
+    minHeight: 212,
+    overflow: 'hidden',
     padding: spacing.sm,
-    width: '48%',
   },
-  emptySeat: {
-    justifyContent: 'center',
+  fullRoomCard: {
+    opacity: 0.78,
   },
-  disabledSeat: {
-    opacity: 0.58,
-  },
-  emptySeatText: {
-    color: colors.muted,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  speakingSeat: {
-    borderColor: 'rgba(69, 224, 255, 0.55)',
-    shadowColor: colors.cyan,
-    shadowOpacity: 0.38,
-    shadowRadius: 18,
-  },
-  memberName: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-    maxWidth: '100%',
-  },
-  audioRow: {
+  compactHeader: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 8,
-  },
-  ownerControls: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 2,
-  },
-  iconButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  requestsCard: {
-    gap: spacing.sm,
-  },
-  requestRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  requestUser: {
+  compactTitleBlock: {
+    flex: 1,
+    gap: 7,
+  },
+  compactRoomName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  roomTag: {
+    backgroundColor: 'rgba(69,224,255,0.12)',
+    borderColor: 'rgba(69,224,255,0.22)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    color: colors.cyan,
+    fontSize: 10,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  paidTag: {
+    backgroundColor: 'rgba(244,180,94,0.15)',
+    borderColor: 'rgba(244,180,94,0.32)',
+    color: colors.goldSoft,
+  },
+  fullTag: {
+    backgroundColor: 'rgba(255,124,156,0.14)',
+    borderColor: 'rgba(255,124,156,0.28)',
+    color: colors.danger,
+  },
+  compactCount: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  miniRoomScene: {
+    alignItems: 'center',
+    height: 88,
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+    position: 'relative',
+  },
+  miniTable: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(69,224,255,0.12)',
+    borderColor: 'rgba(69,224,255,0.26)',
+    borderRadius: 28,
+    borderWidth: 1,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+  paidMiniTable: {
+    backgroundColor: 'rgba(244,180,94,0.12)',
+    borderColor: 'rgba(244,180,94,0.28)',
+  },
+  miniSeat: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    position: 'absolute',
+    width: 42,
+  },
+  filledMiniSeat: {
+    backgroundColor: 'rgba(153,70,255,0.2)',
+    borderColor: 'rgba(247,238,255,0.2)',
+  },
+  miniSeatTop: {
+    top: 0,
+  },
+  miniSeatRight: {
+    right: 0,
+    top: 28,
+  },
+  miniSeatBottom: {
+    bottom: 0,
+  },
+  miniSeatLeft: {
+    left: 0,
+    top: 28,
+  },
+  emptyMiniSeatText: {
+    color: colors.dim,
+    fontSize: 8,
+    fontWeight: '800',
+    marginTop: -2,
+  },
+  compactFooter: {
+    gap: 7,
+    marginTop: spacing.xs,
+  },
+  timePill: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 4,
   },
-  requestName: {
+  timeText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  priceText: {
+    color: colors.goldSoft,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  inlineButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(69,224,255,0.18)',
+    borderColor: 'rgba(69,224,255,0.25)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+  },
+  paidInlineButton: {
+    backgroundColor: 'rgba(244,180,94,0.17)',
+    borderColor: 'rgba(244,180,94,0.28)',
+  },
+  disabledInlineButton: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  inlineButtonText: {
     color: colors.text,
-    fontWeight: '800',
-  },
-  requestActions: {
-    flexDirection: 'row',
-    gap: 8,
+    fontSize: 12,
+    fontWeight: '900',
   },
   closedCard: {
     alignItems: 'center',
@@ -736,12 +532,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  nameInput: {
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    color: colors.text,
-    minHeight: 52,
-    paddingHorizontal: spacing.md,
+  loadingText: {
+    color: colors.muted,
+    lineHeight: 20,
   },
 });

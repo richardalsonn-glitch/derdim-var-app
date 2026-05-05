@@ -15,6 +15,7 @@ import { LettersScreen } from '../screens/LettersScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { MatchingScreen } from '../screens/MatchingScreen';
 import { NightModeScreen } from '../screens/NightModeScreen';
+import { NightRoomScreen } from '../screens/NightRoomScreen';
 import { PackagesScreen } from '../screens/PackagesScreen';
 import { ProfileInfoScreen } from '../screens/ProfileInfoScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -67,6 +68,7 @@ export function AppNavigator() {
         <Stack.Screen component={PackagesScreen} name="Packages" />
         <Stack.Screen component={ProfileScreen} name="Profile" />
         <Stack.Screen component={NightModeScreen} name="NightMode" />
+        <Stack.Screen component={NightRoomScreen} name="NightRoom" />
         <Stack.Screen component={SilentScreamScreen} name="SilentScream" />
         <Stack.Screen component={LettersScreen} name="Letters" />
         <Stack.Screen component={RematchScreen} name="Rematch" />

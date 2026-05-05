@@ -36,6 +36,9 @@ export type RootStackParamList = {
   Packages: undefined;
   Profile: undefined;
   NightMode: undefined;
+  NightRoom: {
+    roomId: string;
+  };
   SilentScream: undefined;
   Letters: undefined;
   Rematch: undefined;
