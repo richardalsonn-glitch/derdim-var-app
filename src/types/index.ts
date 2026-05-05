@@ -66,6 +66,57 @@ export type NightRoomUser = {
   speaking?: boolean;
 };
 
+export type VoiceRoomType = 'night' | 'dert_sira';
+
+export type VoiceRoomPricingType = 'free' | 'paid';
+
+export type VoiceRoomStatus = 'open' | 'full' | 'active' | 'expired' | 'closed';
+
+export type VoiceRoomMemberStatus = 'joined' | 'kicked' | 'left' | 'pending';
+
+export type VoiceRoomRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export type VoiceRoomMember = {
+  id: string;
+  roomId: string;
+  userId: string;
+  username: string;
+  avatarId: string;
+  role: 'owner' | 'speaker' | 'listener' | 'member';
+  seatIndex: number | null;
+  micEnabled: boolean;
+  speakerEnabled: boolean;
+  status: VoiceRoomMemberStatus;
+  joinedAt: string;
+};
+
+export type VoiceRoomJoinRequest = {
+  id: string;
+  roomId: string;
+  requesterId: string;
+  requesterUsername: string;
+  requesterAvatarId: string;
+  status: VoiceRoomRequestStatus;
+  createdAt: string;
+};
+
+export type VoiceRoom = {
+  id: string;
+  roomType: VoiceRoomType;
+  pricingType: VoiceRoomPricingType;
+  name: string;
+  ownerId: string | null;
+  status: VoiceRoomStatus;
+  capacity: number;
+  currentCount: number;
+  startsAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  members: VoiceRoomMember[];
+  requests: VoiceRoomJoinRequest[];
+};
+
 export type Listener = {
   id: string;
   avatarId: string;
