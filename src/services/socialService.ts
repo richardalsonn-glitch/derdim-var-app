@@ -168,6 +168,67 @@ export async function updateFriendship(requestId: string, status: 'accepted' | '
   return { data: true, error: null };
 }
 
+export async function sendFriendshipRequest(receiverId: string): Promise<ServiceResult<'created' | 'already_pending' | 'already_friends'>> {
+  const userIdResult = await getUserId();
+
+  if (userIdResult.error || !userIdResult.data) {
+    return { data: null, error: userIdResult.error };
+  }
+
+  if (!isSupabaseConfigured) {
+    return { data: null, error: { message: 'Arkadaşlık isteği şu anda gönderilemedi.' } };
+  }
+
+  const userId = userIdResult.data;
+
+  if (receiverId === userId) {
+    return { data: null, error: { message: 'Arkadaşlık isteği şu anda gönderilemedi.' } };
+  }
+
+  const existing = await supabase
+    .from('friendships')
+    .select('id, status')
+    .or(`and(requester_id.eq.${userId},receiver_id.eq.${receiverId}),and(requester_id.eq.${receiverId},receiver_id.eq.${userId})`)
+    .maybeSingle();
+
+  if (existing.error) {
+    console.error('[social] sendFriendshipRequest lookup failed:', existing.error.message);
+    if (!isMissingTableError(existing.error)) {
+      return { data: null, error: { message: getFriendlyErrorMessage(existing.error, 'Arkadaşlık isteği gönderilemedi.') } };
+    }
+  }
+
+  if (existing.data?.status === 'accepted') {
+    return { data: 'already_friends', error: null };
+  }
+
+  if (existing.data?.status === 'pending') {
+    return { data: 'already_pending', error: null };
+  }
+
+  const { error } = await supabase
+    .from('friendships')
+    .insert({
+      requester_id: userId,
+      receiver_id: receiverId,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) {
+    console.error('[social] sendFriendshipRequest failed:', error.message);
+
+    if (error.code === '23505') {
+      return { data: 'already_pending', error: null };
+    }
+
+    return { data: null, error: { message: getFriendlyErrorMessage(error, 'Arkadaşlık isteği gönderilemedi.') } };
+  }
+
+  return { data: 'created', error: null };
+}
+
 export async function createOrGetThread(peerUserId: string): Promise<ServiceResult<ChatThreadSummary>> {
   const userIdResult = await getUserId();
 

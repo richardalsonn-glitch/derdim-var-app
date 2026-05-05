@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,7 @@ import { MatchRole, MatchmakingMode, UiTheme } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 const AUTO_CALL_SECONDS = 45;
+const MATCH_WAIT_TIMEOUT_MS = 30000;
 
 type PendingAction =
   | { type: 'role'; role: MatchRole }
@@ -259,13 +260,15 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   const [comingSoonTitle, setComingSoonTitle] = useState('Bu alan');
   const [activeTab, setActiveTab] = useState('home');
   const [matchErrorVisible, setMatchErrorVisible] = useState(false);
-  const [matchErrorMessage, setMatchErrorMessage] = useState('Eslesme su anda baslatilamadi.');
+  const [matchErrorMessage, setMatchErrorMessage] = useState('Eşleşme şu anda başlatılamadı.');
+  const [matchWaitingVisible, setMatchWaitingVisible] = useState(false);
   const [isJoiningQueue, setIsJoiningQueue] = useState(false);
   const fadeValue = useRef(new Animated.Value(0)).current;
   const matchmakingRequestRef = useRef(0);
   const matchmakingPhaseRef = useRef<'idle' | 'waiting' | 'matched'>('idle');
   const isJoiningQueueRef = useRef(false);
   const matchListenerCleanupRef = useRef<null | (() => Promise<void>)>(null);
+  const matchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeValue, {
@@ -281,7 +284,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
 
     if (autoCallCountdown <= 0) {
-      navigation.navigate('VoiceCall');
+      void openVoiceRole('derdim-var');
       setAutoCallCountdown(AUTO_CALL_SECONDS);
       return;
     }
@@ -305,9 +308,18 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
   }
 
+  function clearMatchTimeout() {
+    if (matchTimeoutRef.current) {
+      clearTimeout(matchTimeoutRef.current);
+      matchTimeoutRef.current = null;
+    }
+  }
+
   async function stopMatchmaking() {
     matchmakingRequestRef.current += 1;
     matchmakingPhaseRef.current = 'idle';
+    clearMatchTimeout();
+    setMatchWaitingVisible(false);
 
     const cleanup = matchListenerCleanupRef.current;
     matchListenerCleanupRef.current = null;
@@ -324,12 +336,15 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   }
 
   function showMatchError(message: string) {
+    setMatchWaitingVisible(false);
     setMatchErrorMessage(message);
     setMatchErrorVisible(true);
   }
 
   function openMatchedVoiceCall() {
     matchmakingPhaseRef.current = 'matched';
+    clearMatchTimeout();
+    setMatchWaitingVisible(false);
     navigation.reset({
       index: 0,
       routes: [{ name: 'VoiceCall', params: { matchReady: true } }],
@@ -340,6 +355,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     const requestId = Date.now();
     matchmakingRequestRef.current = requestId;
     matchmakingPhaseRef.current = 'waiting';
+    setMatchWaitingVisible(true);
     setActiveRole(role);
 
     const joinResult = await joinQueue(getMatchmakingMode(role));
@@ -358,6 +374,16 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       openMatchedVoiceCall();
       return;
     }
+
+    clearMatchTimeout();
+    matchTimeoutRef.current = setTimeout(() => {
+      if (matchmakingRequestRef.current !== requestId || matchmakingPhaseRef.current !== 'waiting') {
+        return;
+      }
+
+      void stopMatchmaking();
+      showMatchError('Şu anda uygun kullanıcı bulunamadı. Biraz sonra tekrar deneyebilirsin.');
+    }, MATCH_WAIT_TIMEOUT_MS);
 
     const listenResult = await listenForMatch(() => {
       if (matchmakingRequestRef.current !== requestId) {
@@ -405,12 +431,6 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           setPermissionModalVisible(true);
           return;
         }
-      }
-
-      if (!isLiveKitEnabled) {
-        setActiveRole(role);
-        openMatchedVoiceCall();
-        return;
       }
 
       await stopMatchmaking();
@@ -738,9 +758,18 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setMatchErrorVisible(false), variant: 'secondary' }]}
         message={matchErrorMessage}
-        title="Eslesme baslatilamadi"
+        title="Eşleşme"
         visible={matchErrorVisible}
       />
+
+      <NoticeModal
+        actions={[{ label: 'İptal Et', onPress: () => void stopMatchmaking(), variant: 'ghost' }]}
+        message="Uygun kullanıcı aranıyor..."
+        title="Seni anlayacak biri aranıyor..."
+        visible={matchWaitingVisible}
+      >
+        <ActivityIndicator color={palette.cyan} size="large" />
+      </NoticeModal>
     </LinearGradient>
   );
 }

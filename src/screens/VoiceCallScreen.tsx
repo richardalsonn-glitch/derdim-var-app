@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, Vibration, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, Vibration, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,7 +9,7 @@ import { Avatar } from '../components/Avatar';
 import { CountdownRing, useCountdownTimer } from '../components/CountdownRing';
 import { GiftCelebrationOverlay, GiftModal } from '../components/GiftModal';
 import { NoticeModal } from '../components/NoticeModal';
-import { isLiveKitEnabled } from '../config/features';
+import { isDemoMode, isLiveKitEnabled } from '../config/features';
 import { colors, gradients, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { getAvatarById, topics } from '../data/mockData';
@@ -18,6 +18,7 @@ import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import { getCurrentUser } from '../services/authService';
 import { getActiveMatch, leaveQueue } from '../services/matchService';
 import { requestMicrophonePermission } from '../services/permissionsService';
+import { sendFriendshipRequest } from '../services/socialService';
 import { joinRoom, leaveRoom, toggleMute, toggleSpeaker } from '../services/voiceService';
 import { FriendRequestItem, FriendSummary, Gender, GiftItem, MembershipPlan, TopicTag } from '../types';
 
@@ -75,15 +76,26 @@ type Metrics = {
 
 const SEARCH_SECONDS = 2;
 const CALL_SECONDS = 60;
+const WAITING_SECONDS = 30;
 const COUNTDOWN_AUDIO_SOURCE = require('../../assets/audio/gerisayim-1.m4a');
 const RINGING_AUDIO_SOURCE = require('../../assets/audio/ringing.m4a');
 
-const partners: MatchPartner[] = [
+const demoPartners: MatchPartner[] = [
   { id: 'luna', username: 'Luna_24', avatarId: 'f-2', gender: 'Kadın', plan: 'vip', dermanScore: 4.8, level: 3 },
   { id: 'atlas', username: 'Atlas_28', avatarId: 'm-1', gender: 'Erkek', plan: 'plus', dermanScore: 4.6, level: 2 },
   { id: 'nova', username: 'Nova_23', avatarId: 'f-1', gender: 'Kadın', plan: 'plus', dermanScore: 4.7, level: 3 },
   { id: 'eren', username: 'Eren_31', avatarId: 'm-2', gender: 'Erkek', plan: 'vip', dermanScore: 4.9, level: 4 },
 ];
+
+const waitingPartner: MatchPartner = {
+  id: 'waiting',
+  username: 'Uygun kullanıcı aranıyor',
+  avatarId: 'f-1',
+  gender: 'Kadın',
+  plan: 'free',
+  dermanScore: 0,
+  level: 1,
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -241,6 +253,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   const metrics = useMemo(() => getMetrics(width, height), [width, height]);
   const realtimePartner = useMemo(() => buildRealtimePartner(route.params), [route.params]);
   const isRealtimeSession = Boolean(route.params?.matchReady && realtimePartner);
+  const isDemoSession = isDemoMode && !isRealtimeSession;
   const [phase, setPhase] = useState<CallPhase>(isRealtimeSession ? 'matched' : 'searching');
   const [matchSeed, setMatchSeed] = useState(0);
   const [searchRemaining, setSearchRemaining] = useState(isRealtimeSession ? 0 : SEARCH_SECONDS);
@@ -249,6 +262,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
   const [giftOverlayVisible, setGiftOverlayVisible] = useState(false);
   const [friendNoticeVisible, setFriendNoticeVisible] = useState(false);
+  const [friendNoticeMessage, setFriendNoticeMessage] = useState('Arkadaşlık isteği gönderildi.');
   const [blockConfirmVisible, setBlockConfirmVisible] = useState(false);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [likeNoticeVisible, setLikeNoticeVisible] = useState(false);
@@ -262,12 +276,14 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   const [permissionNoticeVisible, setPermissionNoticeVisible] = useState(false);
   const [voiceErrorVisible, setVoiceErrorVisible] = useState(false);
   const [voiceErrorMessage, setVoiceErrorMessage] = useState('Sesli gorusme baglantisi kurulurken bir hata olustu.');
-  const [partner, setPartner] = useState<MatchPartner>(realtimePartner ?? partners[0]);
-  const [partnerScore, setPartnerScore] = useState((realtimePartner ?? partners[0]).dermanScore);
+  const initialPartner = realtimePartner ?? (isDemoMode ? demoPartners[0] : waitingPartner);
+  const [partner, setPartner] = useState<MatchPartner>(initialPartner);
+  const [partnerScore, setPartnerScore] = useState(initialPartner.dermanScore);
   const [partnerLiked, setPartnerLiked] = useState(false);
   const [likedThisMatch, setLikedThisMatch] = useState(false);
   const [incomingFriendRequestId, setIncomingFriendRequestId] = useState<string | null>(null);
   const [incomingFriendPrompted, setIncomingFriendPrompted] = useState(false);
+  const [waitingExpired, setWaitingExpired] = useState(false);
   const isMatched = phase === 'matched';
   const partnerAvatar = useMemo(() => getAvatarById(partner.avatarId), [partner.avatarId]);
   const partnerBadge = getBadge(partner.plan);
@@ -648,15 +664,15 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }
 
   function selectPartner(nextSeed: number) {
-    for (let offset = 0; offset < partners.length; offset += 1) {
-      const candidate = partners[(nextSeed + skipCount + offset) % partners.length];
+    for (let offset = 0; offset < demoPartners.length; offset += 1) {
+      const candidate = demoPartners[(nextSeed + skipCount + offset) % demoPartners.length];
 
       if (!blockedUserIds.includes(candidate.id)) {
         return candidate;
       }
     }
 
-    return partners[(nextSeed + skipCount) % partners.length];
+    return demoPartners[(nextSeed + skipCount) % demoPartners.length];
   }
 
   function startSearch(nextSeed: number) {
@@ -689,11 +705,15 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
       return;
     }
 
+    if (!isDemoSession) {
+      return;
+    }
+
     startSearch(matchSeed);
-  }, [blockedIdsKey, isRealtimeSession, matchSeed, skipCount]);
+  }, [blockedIdsKey, isDemoSession, isRealtimeSession, matchSeed, skipCount]);
 
   useEffect(() => {
-    if (isRealtimeSession) {
+    if (isRealtimeSession || !isDemoSession) {
       return;
     }
 
@@ -715,10 +735,10 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     }, 1000);
 
     return () => clearInterval(timerId);
-  }, [isRealtimeSession, phase, reset]);
+  }, [isDemoSession, isRealtimeSession, phase, reset]);
 
   useEffect(() => {
-    if (!isMatched || incomingFriendPrompted) {
+    if (!isDemoSession || !isMatched || incomingFriendPrompted) {
       return;
     }
 
@@ -729,7 +749,19 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     }, 9000);
 
     return () => clearTimeout(timerId);
-  }, [incomingFriendPrompted, isMatched, partner, receiveFriendRequest]);
+  }, [incomingFriendPrompted, isDemoSession, isMatched, partner, receiveFriendRequest]);
+
+  useEffect(() => {
+    if (isRealtimeSession || isDemoSession) {
+      return;
+    }
+
+    const timerId = setTimeout(() => {
+      setWaitingExpired(true);
+    }, WAITING_SECONDS * 1000);
+
+    return () => clearTimeout(timerId);
+  }, [isDemoSession, isRealtimeSession]);
 
   useEffect(() => () => {
     if (isRealtimeSession) {
@@ -838,8 +870,30 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     beginNextMatch();
   }
 
-  function handleFriendRequestSend() {
-    sendFriendRequest(getPartnerSummary(partner));
+  async function handleFriendRequestSend() {
+    if (isDemoSession) {
+      sendFriendRequest(getPartnerSummary(partner));
+      setFriendNoticeMessage('Arkadaşlık isteği gönderildi.');
+      setFriendNoticeVisible(true);
+      return;
+    }
+
+    const result = await sendFriendshipRequest(partner.id);
+
+    if (result.error || !result.data) {
+      setFriendNoticeMessage(result.error?.message ?? 'Arkadaşlık isteği gönderilemedi.');
+      setFriendNoticeVisible(true);
+      return;
+    }
+
+    if (result.data === 'already_friends') {
+      setFriendNoticeMessage('Bu kullanıcı zaten arkadaşın.');
+    } else if (result.data === 'already_pending') {
+      setFriendNoticeMessage('Arkadaşlık isteği zaten gönderilmiş.');
+    } else {
+      setFriendNoticeMessage('Arkadaşlık isteği gönderildi.');
+    }
+
     setFriendNoticeVisible(true);
   }
 
@@ -857,6 +911,28 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     }
 
     setIncomingFriendRequestId(null);
+  }
+
+  if (!isRealtimeSession && !isDemoSession) {
+    return (
+      <LinearGradient colors={[...gradients.background]} style={styles.screen}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={[styles.waitingShell, { paddingHorizontal: metrics.horizontalPadding }]}>
+            <ActivityIndicator color={colors.cyan} size="large" />
+            <Text style={styles.waitingTitle}>Seni anlayacak biri aranıyor...</Text>
+            <Text style={styles.waitingSubtitle}>
+              {waitingExpired
+                ? 'Şu anda uygun kullanıcı bulunamadı. Biraz sonra tekrar deneyebilirsin.'
+                : 'Uygun kullanıcı aranıyor...'}
+            </Text>
+            <Pressable onPress={() => void returnHomeSafely()} style={styles.waitingButton}>
+              <Ionicons color={colors.text} name="close" size={18} />
+              <Text style={styles.waitingButtonText}>{waitingExpired ? 'Geri Dön' : 'İptal Et'}</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
   }
 
   return (
@@ -959,7 +1035,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
               </View>
 
               <View style={[styles.sideActions, { width: metrics.sideColumnWidth, gap: metrics.tinyGap }]}>
-                <Pressable onPress={handleFriendRequestSend} style={[styles.sideActionButton, { height: metrics.sideButtonHeight }]}>
+                <Pressable onPress={() => void handleFriendRequestSend()} style={[styles.sideActionButton, { height: metrics.sideButtonHeight }]}>
                   <Ionicons color={colors.text} name="person-add" size={16} />
                   <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.sideActionText}>
                     Arkadaş Ekle
@@ -1134,7 +1210,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
 
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setFriendNoticeVisible(false), variant: 'secondary' }]}
-        message="Arkadaşlık isteği gönderildi."
+        message={friendNoticeMessage}
         title="İstek gönderildi"
         visible={friendNoticeVisible}
       />
@@ -1258,6 +1334,44 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: layout.maxWidth,
     alignSelf: 'center',
+  },
+  waitingShell: {
+    flex: 1,
+    width: '100%',
+    maxWidth: layout.maxWidth,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  waitingTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  waitingSubtitle: {
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  waitingButton: {
+    minWidth: 136,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  waitingButtonText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
   },
   orb: {
     position: 'absolute',
