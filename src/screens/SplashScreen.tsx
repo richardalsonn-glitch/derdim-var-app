@@ -5,19 +5,68 @@ import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NoticeModal } from '../components/NoticeModal';
 import { colors, gradients, layout, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
 import { AppScreenProps } from '../navigation/types';
-import { restoreAuthProfile } from '../services/authService';
+import { restoreAuthProfile, signInWithEmail, signUpWithEmail } from '../services/authService';
+import { getFriendlyErrorMessage } from '../utils/errorMessages';
 
 const welcomeBg = require('../../assets/images/anasayfayeni12.png');
+
+type AuthMode = 'login' | 'register';
+
+type AuthFieldProps = {
+  compact?: boolean;
+  height: number;
+  icon: keyof typeof Ionicons.glyphMap;
+  keyboardType?: 'default' | 'email-address';
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  secureTextEntry?: boolean;
+  value: string;
+};
+
+function AuthField({
+  compact = false,
+  height,
+  icon,
+  keyboardType = 'default',
+  onChangeText,
+  placeholder,
+  secureTextEntry = false,
+  value,
+}: AuthFieldProps) {
+  return (
+    <View style={[styles.inputShell, compact && styles.compactInputShell, { height }]}>
+      <Ionicons color={colors.muted} name={icon} size={compact ? 16 : 18} />
+      <TextInput
+        autoCapitalize="none"
+        keyboardType={keyboardType}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="rgba(247,238,255,0.62)"
+        secureTextEntry={secureTextEntry}
+        style={[styles.input, compact && styles.compactInput]}
+        value={value}
+      />
+    </View>
+  );
+}
 
 export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
   const { height, width } = useWindowDimensions();
   const { profile, updateProfile } = useAppState();
   const [assetReady, setAssetReady] = useState(false);
   const [sessionRestored, setSessionRestored] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [username, setUsername] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordRepeat, setPasswordRepeat] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [errorVisible, setErrorVisible] = useState(false);
   const insets = useSafeAreaInsets();
   const heroFade = useRef(new Animated.Value(0)).current;
   const loadingPulse = useRef(new Animated.Value(0.5)).current;
@@ -26,8 +75,10 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
   const tiny = height < 720;
   const compact = height < 800;
   const horizontalPadding = width < 380 ? 18 : 24;
-  const moduleTop = height * (tiny ? 0.515 : compact ? 0.53 : 0.54);
+  const moduleTop = height * (tiny ? 0.49 : compact ? 0.505 : 0.52);
   const moduleMaxWidth = Math.min(layout.maxWidth - 24, width - horizontalPadding * 2);
+  const fieldHeight = tiny ? 32 : 36;
+  const buttonHeight = tiny ? 36 : 40;
 
   useEffect(() => {
     if (restoreStarted.current) {
@@ -112,13 +163,126 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
     };
   }, [heroFade, loadingPulse]);
 
-  function openLogin() {
-    navigation.navigate('Login');
+  function enterWithProfile(userEmail: string | null | undefined, restoredProfile: Awaited<ReturnType<typeof restoreAuthProfile>>) {
+    updateProfile({
+      email: userEmail ?? identifier.trim(),
+      username: restoredProfile.data?.profile?.username ?? profile.username,
+      plan: restoredProfile.data?.profile?.plan ?? profile.plan,
+      avatarId: restoredProfile.data?.profile?.avatarId ?? profile.avatarId,
+      isFrozen: restoredProfile.data?.profile?.isFrozen ?? profile.isFrozen,
+    });
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: restoredProfile.data?.profile?.isFrozen ? 'FrozenAccount' : 'Home' }],
+    });
+  }
+
+  async function handleLogin() {
+    const email = identifier.trim();
+
+    if (!email) {
+      setErrorMessage('Lütfen e-posta adresini gir.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (!password.trim()) {
+      setErrorMessage('Lütfen şifreni gir.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await signInWithEmail(email, password);
+
+    if (result.error) {
+      setIsSubmitting(false);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'E-posta veya şifre hatalı.'));
+      setErrorVisible(true);
+      return;
+    }
+
+    const restoredProfile = await restoreAuthProfile(result.data?.user ?? null);
+
+    if (restoredProfile.error) {
+      setIsSubmitting(false);
+      setErrorMessage(getFriendlyErrorMessage(restoredProfile.error, 'Oturum bilgilerin alınamadı. Lütfen tekrar giriş yap.'));
+      setErrorVisible(true);
+      return;
+    }
+
+    setIsSubmitting(false);
+    enterWithProfile(result.data?.user?.email, restoredProfile);
+  }
+
+  async function handleRegister() {
+    const trimmedUsername = username.trim();
+    const email = identifier.trim();
+
+    if (!trimmedUsername) {
+      setErrorMessage('Lütfen kullanıcı adını gir.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (!email) {
+      setErrorMessage('Lütfen e-posta adresini gir.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (!password.trim()) {
+      setErrorMessage('Lütfen şifreni gir.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (password !== passwordRepeat) {
+      setErrorMessage('Şifreler eşleşmiyor.');
+      setErrorVisible(true);
+      return;
+    }
+
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await signUpWithEmail(email, password, trimmedUsername);
+
+    if (result.error) {
+      setIsSubmitting(false);
+      setErrorMessage(getFriendlyErrorMessage(result.error, 'Kayıt oluşturulamadı. Lütfen tekrar deneyin.'));
+      setErrorVisible(true);
+      return;
+    }
+
+    updateProfile({
+      username: trimmedUsername,
+      email,
+      age: 0,
+      birthDate: undefined,
+      relationshipStatus: '',
+      plan: 'free',
+    });
+    setIsSubmitting(false);
+    navigation.navigate('ProfileInfo');
+  }
+
+  function switchMode(nextMode: AuthMode) {
+    setAuthMode(nextMode);
+    setErrorVisible(false);
+    setErrorMessage('');
   }
 
   return (
     <View style={styles.screen}>
-      <ImageBackground resizeMode="cover" source={welcomeBg} style={styles.background}>
+      <ImageBackground resizeMode="contain" source={welcomeBg} style={styles.background}>
         <Animated.View style={[styles.imageFade, { opacity: heroFade }]} />
         <View pointerEvents="none" style={styles.readabilityOverlay} />
 
@@ -158,28 +322,66 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
             colors={['rgba(9,12,34,0.48)', 'rgba(68,31,102,0.36)', 'rgba(9,12,34,0.48)']}
             style={[styles.moduleGlass, { gap: tiny ? 5 : 6, padding: tiny ? 8 : 10 }]}
           >
-            <View style={[styles.inputShell, { height: tiny ? 36 : 42 }]}>
-              <Ionicons color={colors.muted} name="person-circle-outline" size={20} />
-              <TextInput
-                autoCapitalize="none"
-                keyboardType="email-address"
-                onChangeText={setIdentifier}
-                placeholder="Telefon / E-posta"
-                placeholderTextColor="rgba(247,238,255,0.62)"
-                style={styles.input}
-                value={identifier}
+            {authMode === 'register' ? (
+              <AuthField
+                height={fieldHeight}
+                icon="person-outline"
+                onChangeText={setUsername}
+                placeholder="Kullanıcı adı"
+                value={username}
               />
-            </View>
+            ) : null}
 
-            <Pressable onPress={openLogin}>
+            <AuthField
+              height={fieldHeight}
+              icon="mail-outline"
+              keyboardType="email-address"
+              onChangeText={setIdentifier}
+              placeholder="E-posta / Telefon"
+              value={identifier}
+            />
+
+            {authMode === 'register' ? (
+              <View style={styles.passwordRow}>
+                <AuthField
+                  compact
+                  height={fieldHeight}
+                  icon="lock-closed-outline"
+                  onChangeText={setPassword}
+                  placeholder="Şifre"
+                  secureTextEntry
+                  value={password}
+                />
+                <AuthField
+                  compact
+                  height={fieldHeight}
+                  icon="checkmark-circle-outline"
+                  onChangeText={setPasswordRepeat}
+                  placeholder="Tekrar"
+                  secureTextEntry
+                  value={passwordRepeat}
+                />
+              </View>
+            ) : (
+              <AuthField
+                height={fieldHeight}
+                icon="lock-closed-outline"
+                onChangeText={setPassword}
+                placeholder="Şifre"
+                secureTextEntry
+                value={password}
+              />
+            )}
+
+            <Pressable disabled={isSubmitting} onPress={authMode === 'login' ? handleLogin : handleRegister} style={isSubmitting && styles.disabled}>
               <LinearGradient
                 colors={[...gradients.primary]}
                 end={{ x: 1, y: 0.5 }}
                 start={{ x: 0, y: 0.5 }}
-                style={[styles.primaryButton, { height: tiny ? 38 : 42 }]}
+                style={[styles.primaryButton, { height: buttonHeight }]}
               >
-                <Text style={styles.primaryButtonText}>Devam Et</Text>
-                <Ionicons color={colors.text} name="arrow-forward" size={18} />
+                <Text style={styles.primaryButtonText}>{isSubmitting ? 'İşleniyor...' : authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol'}</Text>
+                {!isSubmitting ? <Ionicons color={colors.text} name="arrow-forward" size={18} /> : null}
               </LinearGradient>
             </Pressable>
 
@@ -189,17 +391,24 @@ export function SplashScreen({ navigation }: AppScreenProps<'Splash'>) {
               <View style={styles.dividerLine} />
             </View>
 
-            <View style={styles.secondaryRow}>
-              <Pressable onPress={openLogin} style={[styles.secondaryButton, { height: tiny ? 32 : 36 }]}>
-                <Text style={styles.secondaryButtonText}>Giriş Yap</Text>
-              </Pressable>
-              <Pressable onPress={() => navigation.navigate('Register')} style={[styles.secondaryButton, styles.registerButton, { height: tiny ? 32 : 36 }]}>
-                <Text style={styles.secondaryButtonText}>Kayıt Ol</Text>
+            <View style={styles.modeSwitchRow}>
+              <Text style={styles.modeSwitchText}>{authMode === 'login' ? 'Hesabın yok mu?' : 'Zaten hesabın var mı?'}</Text>
+              <Pressable onPress={() => switchMode(authMode === 'login' ? 'register' : 'login')}>
+                <Text style={styles.modeSwitchButton}>{authMode === 'login' ? 'Kayıt Ol' : 'Giriş Yap'}</Text>
               </Pressable>
             </View>
           </LinearGradient>
         </View>
       </ImageBackground>
+
+      <NoticeModal
+        actions={[
+          { label: 'Tamam', onPress: () => setErrorVisible(false), variant: 'secondary' },
+        ]}
+        message={errorMessage || 'İşlem sırasında bir hata oluştu.'}
+        title={authMode === 'login' ? 'Giriş tamamlanamadı' : 'Kayıt tamamlanamadı'}
+        visible={errorVisible}
+      />
     </View>
   );
 }
@@ -218,7 +427,7 @@ const styles = StyleSheet.create({
   },
   readabilityOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(3,5,18,0.08)',
+    backgroundColor: 'rgba(3,5,18,0.06)',
   },
   loaderWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -262,9 +471,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(174,111,255,0.34)',
     borderRadius: radius.pill,
     borderWidth: 1,
+    flex: 1,
     flexDirection: 'row',
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
+  },
+  compactInputShell: {
+    paddingHorizontal: spacing.sm,
   },
   input: {
     color: colors.text,
@@ -272,6 +485,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     paddingVertical: 0,
+  },
+  compactInput: {
+    fontSize: 12,
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   primaryButton: {
     alignItems: 'center',
@@ -288,6 +508,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  disabled: {
+    opacity: 0.72,
+  },
   dividerRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -303,25 +526,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
-  secondaryRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  secondaryButton: {
+  modeSwitchRow: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.055)',
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
     justifyContent: 'center',
+    minHeight: 22,
   },
-  registerButton: {
-    borderColor: 'rgba(255,79,185,0.32)',
+  modeSwitchText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
-  secondaryButtonText: {
-    color: colors.text,
-    fontSize: 13,
+  modeSwitchButton: {
+    color: colors.pink,
+    fontSize: 12,
     fontWeight: '900',
   },
 });
