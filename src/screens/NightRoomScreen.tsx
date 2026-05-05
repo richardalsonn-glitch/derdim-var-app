@@ -484,8 +484,14 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
                 <View style={[styles.centerTableOuter, { borderRadius: (layout.tableSize - 12) / 2, height: layout.tableSize - 12, width: layout.tableSize - 12 }]}>
                   <View style={[styles.centerTable, { borderRadius: (layout.tableSize - 26) / 2, height: layout.tableSize - 26, width: layout.tableSize - 26 }]}>
                     <Ionicons color={colors.goldSoft} name="moon" size={layout.compact ? 24 : 28} />
-                    <Text style={[styles.centerTableTitle, layout.compact && styles.compactCenterTableTitle]}>Gece Sohbet</Text>
-                    {!tiny ? <Text style={styles.centerTableSubtitle}>Odası</Text> : null}
+                    <Text
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.72}
+                      numberOfLines={2}
+                      style={[styles.centerTableTitle, layout.compact && styles.compactCenterTableTitle]}
+                    >
+                      {room.name || 'Gece sohbet'}
+                    </Text>
                   </View>
                 </View>
               </LinearGradient>
