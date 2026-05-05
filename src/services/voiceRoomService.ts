@@ -1,5 +1,4 @@
 import { defaultProfile } from '../data/mockData';
-import { logSafeError } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { VoiceRoom, VoiceRoomJoinRequest, VoiceRoomMember, VoiceRoomPricingType, VoiceRoomStatus, VoiceRoomType } from '../types';
 
@@ -56,6 +55,10 @@ type ProfileRow = {
 const genericError: ServiceError = {
   message: 'İşlem şu anda tamamlanamadı. Lütfen tekrar deneyin.',
 };
+
+function logRealtimeNotice(scope: string) {
+  console.info(`${scope}: bağlantı sessizce yenileniyor.`);
+}
 
 function normalizeRoom(row: VoiceRoomRow, members: VoiceRoomMember[], requests: VoiceRoomJoinRequest[]): VoiceRoom {
   return {
@@ -227,17 +230,76 @@ function removeExistingRealtimeChannels(topic: string) {
   });
 }
 
-function subscribeWithFallback(channel: ReturnType<typeof supabase.channel>, scope: string) {
-  try {
-    return channel.subscribe((status, error) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        logSafeError(scope, error ?? status);
+function createRealtimeSubscription(topic: string, buildChannel: () => ReturnType<typeof supabase.channel>, scope: string) {
+  let activeChannel: ReturnType<typeof supabase.channel> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
+
+  const clearRetry = () => {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
+  const scheduleReconnect = () => {
+    if (disposed || retryTimer) {
+      return;
+    }
+
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+
+      if (!disposed) {
+        connect();
       }
-    });
-  } catch (error) {
-    logSafeError(scope, error);
-    return null;
-  }
+    }, 3000);
+  };
+
+  const connect = () => {
+    if (disposed) {
+      return;
+    }
+
+    try {
+      removeExistingRealtimeChannels(topic);
+      activeChannel = buildChannel().subscribe((status) => {
+        if (disposed) {
+          return;
+        }
+
+        if (status === 'SUBSCRIBED') {
+          clearRetry();
+          return;
+        }
+
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          logRealtimeNotice(scope);
+          scheduleReconnect();
+          return;
+        }
+
+        if (status === 'CLOSED') {
+          scheduleReconnect();
+        }
+      });
+    } catch {
+      logRealtimeNotice(scope);
+      scheduleReconnect();
+    }
+  };
+
+  connect();
+
+  return () => {
+    disposed = true;
+    clearRetry();
+
+    if (activeChannel) {
+      void supabase.removeChannel(activeChannel);
+      activeChannel = null;
+    }
+  };
 }
 
 export function subscribeToNightVoiceRoomsLobby(onChange: () => void) {
@@ -248,20 +310,15 @@ export function subscribeToNightVoiceRoomsLobby(onChange: () => void) {
   const topic = 'realtime:night-voice-rooms-lobby';
   removeExistingRealtimeChannels(topic);
 
-  const channel = subscribeWithFallback(
-    supabase
+  return createRealtimeSubscription(
+    topic,
+    () => supabase
       .channel(topic)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_rooms' }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_members' }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_join_requests' }, onChange),
-    '[voice-room] lobby realtime',
+    'Gece Modu lobby',
   );
-
-  return () => {
-    if (channel) {
-      void supabase.removeChannel(channel);
-    }
-  };
 }
 
 export function subscribeToNightVoiceRoom(roomId: string, onChange: () => void) {
@@ -272,20 +329,15 @@ export function subscribeToNightVoiceRoom(roomId: string, onChange: () => void) 
   const topic = `realtime:night-room-${roomId}`;
   removeExistingRealtimeChannels(topic);
 
-  const channel = subscribeWithFallback(
-    supabase
+  return createRealtimeSubscription(
+    topic,
+    () => supabase
       .channel(topic)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_rooms', filter: `id=eq.${roomId}` }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_members', filter: `room_id=eq.${roomId}` }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_room_join_requests', filter: `room_id=eq.${roomId}` }, onChange),
-    '[voice-room] room realtime',
+    'Gece Modu oda',
   );
-
-  return () => {
-    if (channel) {
-      void supabase.removeChannel(channel);
-    }
-  };
 }
 
 async function callRoomRpc(functionName: string, params: Record<string, unknown>): Promise<ServiceResult<true>> {

@@ -204,9 +204,10 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
         style={styles.roomPressable}
       >
         <LinearGradient
-          colors={isPaid ? ['rgba(244,180,94,0.18)', 'rgba(20,24,60,0.72)'] : ['rgba(69,224,255,0.12)', 'rgba(20,24,60,0.72)']}
+          colors={isPaid ? ['rgba(244,180,94,0.22)', 'rgba(153,70,255,0.1)', 'rgba(20,24,60,0.78)'] : ['rgba(69,224,255,0.16)', 'rgba(153,70,255,0.12)', 'rgba(20,24,60,0.78)']}
           style={[styles.compactRoomCard, isFull && styles.fullRoomCard]}
         >
+          <View pointerEvents="none" style={[styles.cardSheen, isPaid && styles.paidCardSheen]} />
           <View style={styles.compactHeader}>
             <View style={styles.compactTitleBlock}>
               <Text numberOfLines={1} style={styles.compactRoomName}>{room.name}</Text>
@@ -220,7 +221,9 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 
           <View style={styles.miniRoomScene}>
             <View style={[styles.miniTable, isPaid && styles.paidMiniTable]}>
-              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={16} />
+              <View style={styles.miniTableInner}>
+                <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={15} />
+              </View>
             </View>
             {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index))}
           </View>
@@ -369,6 +372,21 @@ const styles = StyleSheet.create({
     minHeight: 212,
     overflow: 'hidden',
     padding: spacing.sm,
+    shadowColor: colors.purple,
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+  },
+  cardSheen: {
+    backgroundColor: 'rgba(69,224,255,0.1)',
+    borderRadius: 999,
+    height: 86,
+    position: 'absolute',
+    right: -38,
+    top: -44,
+    width: 86,
+  },
+  paidCardSheen: {
+    backgroundColor: 'rgba(244,180,94,0.13)',
   },
   fullRoomCard: {
     opacity: 0.78,
@@ -437,6 +455,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 56,
   },
+  miniTableInner: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(6,8,22,0.62)',
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
   paidMiniTable: {
     backgroundColor: 'rgba(244,180,94,0.12)',
     borderColor: 'rgba(244,180,94,0.28)',
@@ -453,8 +481,11 @@ const styles = StyleSheet.create({
     width: 42,
   },
   filledMiniSeat: {
-    backgroundColor: 'rgba(153,70,255,0.2)',
-    borderColor: 'rgba(247,238,255,0.2)',
+    backgroundColor: 'rgba(153,70,255,0.24)',
+    borderColor: 'rgba(247,238,255,0.24)',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   miniSeatTop: {
     top: 0,
@@ -503,6 +534,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 30,
     justifyContent: 'center',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
   },
   paidInlineButton: {
     backgroundColor: 'rgba(244,180,94,0.17)',

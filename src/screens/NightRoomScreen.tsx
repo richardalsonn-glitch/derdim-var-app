@@ -60,6 +60,34 @@ function getFreeSeat(room: VoiceRoom) {
   return null;
 }
 
+function getRoomStatusLabel(room: VoiceRoom) {
+  if (room.pricingType === 'free' && room.currentCount < room.capacity) {
+    return '4 kişi tamamlanınca konuşma başlar';
+  }
+
+  if (room.pricingType === 'paid' && room.ownerId && room.currentCount <= 1) {
+    return 'Oda sahibini bekliyor';
+  }
+
+  return 'Oda aktif';
+}
+
+function getMemberStatusLabel(member: VoiceRoomMember, controlsLocked: boolean) {
+  if (controlsLocked) {
+    return 'Hazır';
+  }
+
+  if (member.micEnabled) {
+    return 'Konuşuyor';
+  }
+
+  if (member.speakerEnabled) {
+    return 'Dinliyor';
+  }
+
+  return 'Hazır';
+}
+
 export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom'>) {
   const { roomId } = route.params;
   const glow = useRef(new Animated.Value(0.72)).current;
@@ -121,8 +149,8 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0.72, duration: 1200, useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0.72, duration: 1400, useNativeDriver: true }),
       ]),
     );
 
@@ -251,29 +279,37 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   function renderSeat(member: VoiceRoomMember | null, seatIndex: number) {
     const isCurrentUser = Boolean(member && member.userId === currentUserId);
     const isActive = Boolean(member && (member.micEnabled || member.speakerEnabled));
+    const isSeatOwner = Boolean(member && room?.ownerId === member.userId);
     const seatPositionStyle = [styles.seatTop, styles.seatRight, styles.seatBottom, styles.seatLeft][seatIndex];
 
     return (
       <Animated.View key={seatIndex} style={[styles.roomSeat, seatPositionStyle, isActive && { opacity: glow }, isCurrentUser && styles.currentUserSeat]}>
         <LinearGradient
-          colors={member ? ['rgba(153,70,255,0.24)', 'rgba(69,224,255,0.08)'] : ['rgba(255,255,255,0.055)', 'rgba(255,255,255,0.025)']}
-          style={styles.seatShell}
+          colors={member ? ['rgba(255,79,185,0.16)', 'rgba(69,224,255,0.1)', 'rgba(255,255,255,0.045)'] : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.022)']}
+          style={[styles.seatShell, !member && styles.emptySeatShell, isCurrentUser && styles.currentSeatShell]}
         >
           {member ? (
             <>
-              <Avatar avatar={getAvatarById(member.avatarId)} size={54} />
+              {isSeatOwner ? (
+                <View style={styles.ownerBadge}>
+                  <Ionicons color={colors.goldSoft} name="star" size={11} />
+                </View>
+              ) : null}
+              <View style={styles.avatarRing}>
+                <Avatar avatar={getAvatarById(member.avatarId)} size={56} />
+              </View>
               <Text numberOfLines={1} style={styles.seatName}>{isCurrentUser ? 'Sen' : member.username}</Text>
-              <View style={styles.seatStatusRow}>
-                <Ionicons color={!controlsLocked && member.micEnabled ? colors.cyan : colors.dim} name={!controlsLocked && member.micEnabled ? 'mic' : 'mic-off'} size={13} />
-                <Ionicons color={!controlsLocked && member.speakerEnabled ? colors.green : colors.dim} name={!controlsLocked && member.speakerEnabled ? 'volume-high' : 'volume-mute'} size={13} />
+              <View style={[styles.memberStatusBadge, isActive && !controlsLocked && styles.activeStatusBadge]}>
+                <Text style={styles.memberStatusText}>{getMemberStatusLabel(member, controlsLocked)}</Text>
               </View>
             </>
           ) : (
             <>
               <View style={styles.emptyChairIcon}>
-                <Ionicons color={colors.dim} name="person-add-outline" size={20} />
+                <Ionicons color={colors.dim} name="add-circle-outline" size={22} />
               </View>
-              <Text style={styles.emptySeatText}>Boş</Text>
+              <Text style={styles.emptySeatText}>Boş Koltuk</Text>
+              <Text style={styles.emptySeatHint}>Katılımcı bekleniyor</Text>
             </>
           )}
         </LinearGradient>
@@ -316,50 +352,82 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
 
   const remainingMs = getRoomRemainingMs(room, nowMs);
   const timerText = remainingMs === null ? (room.pricingType === 'paid' ? '3:00:00' : '30:00') : formatRemaining(remainingMs, room.pricingType === 'paid');
+  const roomStatusLabel = getRoomStatusLabel(room);
 
   return (
     <PremiumScreen contentStyle={styles.content}>
       <ScreenHeader onBack={() => navigation.goBack()} subtitle={room.pricingType === 'paid' ? 'Ücretli oda' : 'Ücretsiz oda'} title="Gece Modu Odası" />
 
-      <LinearGradient colors={['rgba(255,79,185,0.12)', 'rgba(69,224,255,0.08)', 'rgba(255,255,255,0.035)']} style={styles.stage}>
-        <View style={styles.stageHeader}>
-          <View style={styles.stageTitleBlock}>
-            <Text numberOfLines={1} style={styles.roomName}>{room.name}</Text>
-            <Text style={styles.roomMeta}>{room.currentCount}/{room.capacity} kişi • {room.pricingType === 'paid' ? '79,99 TL / oda' : 'Ücretsiz'}</Text>
+      <View style={styles.topPanel}>
+        <View style={styles.topTitleBlock}>
+          <Text numberOfLines={1} style={styles.topTitle}>{room.name}</Text>
+          <Text style={styles.topSubtitle}>{roomStatusLabel}</Text>
+        </View>
+        <View style={styles.topChipRow}>
+          <View style={[styles.infoChip, room.pricingType === 'paid' && styles.paidInfoChip]}>
+            <Text style={styles.infoChipText}>{room.pricingType === 'paid' ? 'Ücretli' : 'Ücretsiz'}</Text>
           </View>
-          <View style={styles.timerPill}>
-            <Ionicons color={colors.goldSoft} name="time" size={14} />
-            <Text style={styles.timerText}>{timerText}</Text>
+          <View style={styles.infoChip}>
+            <Ionicons color={colors.cyan} name="people" size={13} />
+            <Text style={styles.infoChipText}>{room.currentCount}/{room.capacity}</Text>
+          </View>
+          <View style={[styles.infoChip, styles.timerInfoChip]}>
+            <Ionicons color={colors.goldSoft} name="time" size={13} />
+            <Text style={styles.infoChipText}>{timerText}</Text>
           </View>
         </View>
+      </View>
 
+      <LinearGradient colors={['rgba(255,79,185,0.14)', 'rgba(69,224,255,0.09)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={styles.stage}>
+        <View pointerEvents="none" style={[styles.ambientGlow, styles.ambientGlowTop]} />
+        <View pointerEvents="none" style={[styles.ambientGlow, styles.ambientGlowBottom]} />
         <View style={styles.roomScene}>
-          <LinearGradient colors={[...gradients.primary]} style={styles.centerTableGlow}>
-            <View style={styles.centerTable}>
-              <Ionicons color={colors.text} name="moon" size={24} />
-              <Text style={styles.centerTableText}>Masa</Text>
-            </View>
-          </LinearGradient>
+          <Animated.View style={[styles.tablePulse, { opacity: glow }]}>
+            <LinearGradient colors={[...gradients.primary]} style={styles.centerTableGlow}>
+              <View style={styles.centerTableOuter}>
+                <View style={styles.centerTable}>
+                  <Ionicons color={colors.goldSoft} name="moon" size={24} />
+                  <Text numberOfLines={2} style={styles.centerTableTitle}>{room.name}</Text>
+                  <Text style={styles.centerTableSubtitle}>{room.pricingType === 'paid' ? 'Ücretli oda' : 'Gece sohbet odası'}</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </Animated.View>
           {seatMembers.map(renderSeat)}
         </View>
       </LinearGradient>
 
       {isFreeWaiting ? (
-        <GlassCard style={styles.noticeCard}>
-          <Ionicons color={colors.goldSoft} name="lock-closed" size={18} />
-          <Text style={styles.noticeText}>4 kişi tamamlanınca mikrofon ve hoparlör aktif olacak.</Text>
-        </GlassCard>
+        <LinearGradient colors={['rgba(244,180,94,0.16)', 'rgba(255,255,255,0.045)']} style={styles.noticeCard}>
+          <View style={styles.noticeIconWrap}>
+            <Ionicons color={colors.goldSoft} name="lock-closed" size={17} />
+          </View>
+          <View style={styles.noticeCopy}>
+            <Text style={styles.noticeTitle}>Konuşma kilitli</Text>
+            <Text style={styles.noticeText}>4 kişi tamamlanınca mikrofon ve hoparlör aktif olacak.</Text>
+          </View>
+        </LinearGradient>
       ) : null}
 
       <View style={styles.controlRow}>
-        <View style={[styles.audioControl, controlsLocked && styles.lockedControl]}>
+        <Pressable
+          disabled={!currentMembership || busy}
+          onPress={() => currentMembership && void handleToggleAudio(currentMembership)}
+          style={[styles.audioControl, controlsLocked && styles.lockedControl]}
+        >
           <Ionicons color={controlsLocked || !currentMembership?.micEnabled ? colors.dim : colors.cyan} name={controlsLocked || !currentMembership?.micEnabled ? 'mic-off' : 'mic'} size={20} />
           <Text style={styles.audioControlText}>Mikrofon</Text>
-        </View>
-        <View style={[styles.audioControl, controlsLocked && styles.lockedControl]}>
+          {controlsLocked ? <Ionicons color={colors.dim} name="lock-closed" size={12} /> : null}
+        </Pressable>
+        <Pressable
+          disabled={!currentMembership || busy}
+          onPress={() => currentMembership && void handleToggleAudio(currentMembership)}
+          style={[styles.audioControl, controlsLocked && styles.lockedControl]}
+        >
           <Ionicons color={controlsLocked || !currentMembership?.speakerEnabled ? colors.dim : colors.green} name={controlsLocked || !currentMembership?.speakerEnabled ? 'volume-mute' : 'volume-high'} size={20} />
           <Text style={styles.audioControlText}>Hoparlör</Text>
-        </View>
+          {controlsLocked ? <Ionicons color={colors.dim} name="lock-closed" size={12} /> : null}
+        </Pressable>
       </View>
 
       <View style={styles.actions}>
@@ -412,10 +480,15 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
       ) : null}
 
       {room.pricingType === 'paid' ? (
-        <GlassCard style={styles.noticeCard}>
-          <Ionicons color={colors.goldSoft} name="card" size={18} />
-          <Text style={styles.noticeText}>Oda yenileme mağaza içi satın alma ile yakında aktif olacak.</Text>
-        </GlassCard>
+        <LinearGradient colors={['rgba(244,180,94,0.13)', 'rgba(255,255,255,0.04)']} style={styles.noticeCard}>
+          <View style={styles.noticeIconWrap}>
+            <Ionicons color={colors.goldSoft} name="card" size={17} />
+          </View>
+          <View style={styles.noticeCopy}>
+            <Text style={styles.noticeTitle}>Oda yenileme</Text>
+            <Text style={styles.noticeText}>Mağaza içi satın alma ile yakında aktif olacak.</Text>
+          </View>
+        </LinearGradient>
       ) : null}
 
       <NoticeModal
@@ -469,134 +542,231 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '800',
   },
-  stage: {
+  topPanel: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderColor: colors.border,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    minHeight: 470,
-    overflow: 'hidden',
+    gap: spacing.sm,
     padding: spacing.md,
   },
-  stageHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
+  topTitleBlock: {
+    gap: 4,
   },
-  stageTitleBlock: {
-    flex: 1,
-  },
-  roomName: {
+  topTitle: {
     color: colors.text,
     fontSize: 20,
     fontWeight: '900',
   },
-  roomMeta: {
+  topSubtitle: {
     color: colors.muted,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '700',
   },
-  timerPill: {
+  topChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  infoChip: {
     alignItems: 'center',
-    backgroundColor: 'rgba(244,180,94,0.14)',
-    borderColor: 'rgba(244,180,94,0.28)',
+    backgroundColor: 'rgba(69,224,255,0.12)',
+    borderColor: 'rgba(69,224,255,0.22)',
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
-  timerText: {
-    color: colors.goldSoft,
-    fontSize: 12,
-    fontWeight: '900',
+  paidInfoChip: {
+    backgroundColor: 'rgba(244,180,94,0.14)',
+    borderColor: 'rgba(244,180,94,0.28)',
   },
-  roomScene: {
-    flex: 1,
-    marginTop: spacing.md,
-    minHeight: 380,
-    position: 'relative',
+  timerInfoChip: {
+    backgroundColor: 'rgba(244,180,94,0.12)',
   },
-  centerTableGlow: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    borderRadius: 58,
-    height: 116,
-    justifyContent: 'center',
-    left: '50%',
-    marginLeft: -58,
-    marginTop: -58,
-    position: 'absolute',
-    top: '50%',
-    width: 116,
-  },
-  centerTable: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(6,8,22,0.82)',
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 50,
-    borderWidth: 1,
-    height: 100,
-    justifyContent: 'center',
-    width: 100,
-  },
-  centerTableText: {
+  infoChipText: {
     color: colors.text,
     fontSize: 12,
     fontWeight: '900',
-    marginTop: 4,
+  },
+  stage: {
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    minHeight: 458,
+    overflow: 'hidden',
+    padding: spacing.md,
+  },
+  ambientGlow: {
+    borderRadius: 999,
+    height: 180,
+    position: 'absolute',
+    width: 180,
+  },
+  ambientGlowTop: {
+    backgroundColor: 'rgba(255,79,185,0.13)',
+    right: -80,
+    top: -65,
+  },
+  ambientGlowBottom: {
+    backgroundColor: 'rgba(69,224,255,0.12)',
+    bottom: -80,
+    left: -70,
+  },
+  roomScene: {
+    flex: 1,
+    minHeight: 426,
+    position: 'relative',
+  },
+  tablePulse: {
+    alignItems: 'center',
+    height: 136,
+    justifyContent: 'center',
+    left: '50%',
+    marginLeft: -68,
+    marginTop: -68,
+    position: 'absolute',
+    top: '50%',
+    width: 136,
+  },
+  centerTableGlow: {
+    alignItems: 'center',
+    borderRadius: 68,
+    height: 136,
+    justifyContent: 'center',
+    width: 136,
+  },
+  centerTableOuter: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(6,8,22,0.62)',
+    borderColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 61,
+    borderWidth: 1,
+    height: 122,
+    justifyContent: 'center',
+    width: 122,
+  },
+  centerTable: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(6,8,22,0.88)',
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 54,
+    borderWidth: 1,
+    height: 108,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    width: 108,
+  },
+  centerTableTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  centerTableSubtitle: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 3,
+    textAlign: 'center',
   },
   roomSeat: {
     position: 'absolute',
-    width: 126,
+    width: 112,
   },
   seatShell: {
     alignItems: 'center',
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    minHeight: 132,
     justifyContent: 'center',
+    minHeight: 124,
     padding: spacing.sm,
+    shadowColor: colors.purple,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+  },
+  emptySeatShell: {
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderStyle: 'dashed',
+  },
+  currentSeatShell: {
+    borderColor: 'rgba(69,224,255,0.68)',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
   },
   seatTop: {
-    alignSelf: 'center',
     left: '50%',
-    marginLeft: -63,
-    top: 6,
+    marginLeft: -56,
+    top: 4,
   },
   seatRight: {
+    marginTop: -62,
     right: 0,
     top: '50%',
-    marginTop: -66,
   },
   seatBottom: {
-    bottom: 6,
+    bottom: 4,
     left: '50%',
-    marginLeft: -63,
+    marginLeft: -56,
   },
   seatLeft: {
     left: 0,
+    marginTop: -62,
     top: '50%',
-    marginTop: -66,
   },
   currentUserSeat: {
     shadowColor: colors.cyan,
-    shadowOpacity: 0.36,
+    shadowOpacity: 0.38,
     shadowRadius: 18,
+  },
+  ownerBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(244,180,94,0.18)',
+    borderColor: 'rgba(244,180,94,0.34)',
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 22,
+  },
+  avatarRing: {
+    borderColor: 'rgba(255,255,255,0.24)',
+    borderRadius: 34,
+    borderWidth: 1,
+    padding: 3,
   },
   seatName: {
     color: colors.text,
     fontSize: 13,
     fontWeight: '900',
-    marginTop: 8,
+    marginTop: 7,
     maxWidth: '100%',
   },
-  seatStatusRow: {
-    flexDirection: 'row',
-    gap: 7,
+  memberStatusBadge: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
     marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  activeStatusBadge: {
+    backgroundColor: 'rgba(69,224,255,0.14)',
+    borderColor: 'rgba(69,224,255,0.28)',
+  },
+  memberStatusText: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: '900',
   },
   emptyChairIcon: {
     alignItems: 'center',
@@ -609,10 +779,17 @@ const styles = StyleSheet.create({
     width: 56,
   },
   emptySeatText: {
-    color: colors.muted,
-    fontSize: 13,
+    color: colors.text,
+    fontSize: 12,
     fontWeight: '900',
     marginTop: 8,
+  },
+  emptySeatHint: {
+    color: colors.dim,
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 3,
+    textAlign: 'center',
   },
   ownerSeatActions: {
     alignSelf: 'center',
@@ -622,15 +799,37 @@ const styles = StyleSheet.create({
   },
   noticeCard: {
     alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.sm,
+    padding: spacing.md,
+  },
+  noticeIconWrap: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  noticeCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  noticeTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
   },
   noticeText: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 20,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   controlRow: {
     flexDirection: 'row',
@@ -643,12 +842,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     flex: 1,
-    gap: 7,
-    minHeight: 74,
+    gap: 6,
     justifyContent: 'center',
+    minHeight: 76,
+    paddingVertical: spacing.sm,
   },
   lockedControl: {
-    opacity: 0.56,
+    opacity: 0.58,
   },
   audioControlText: {
     color: colors.text,
