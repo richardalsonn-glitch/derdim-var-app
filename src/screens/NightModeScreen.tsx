@@ -81,6 +81,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [selectedRoomType, setSelectedRoomType] = useState<'free' | 'paid'>('free');
   const nightOpen = isDemoMode || isNightModeOpen();
 
   const loadRooms = useCallback(async (silent = false) => {
@@ -123,6 +124,10 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 
   const freeRooms = useMemo(() => rooms.filter((room) => room.pricingType === 'free').slice(0, 4), [rooms]);
   const paidRooms = useMemo(() => rooms.filter((room) => room.pricingType === 'paid').slice(0, 4), [rooms]);
+  const visibleRooms = selectedRoomType === 'free' ? freeRooms : paidRooms;
+  const selectedIsPaid = selectedRoomType === 'paid';
+  const selectedSectionTitle = selectedIsPaid ? 'Ücretli Odalar' : 'Ücretsiz Odalar';
+  const selectedSectionHint = selectedIsPaid ? 'Sahipli oda, istekle katılım' : '4 kişi dolunca konuşma başlar';
 
   async function handleRoomPress(room: VoiceRoom) {
     const isMember = room.members.some((member) => member.userId === currentUserId);
@@ -283,6 +288,31 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     );
   }
 
+  function renderRoomTypeSegment() {
+    return (
+      <View style={styles.segmentWrap}>
+        <Pressable onPress={() => setSelectedRoomType('free')} style={styles.segmentPressable}>
+          <LinearGradient
+            colors={selectedRoomType === 'free' ? ['rgba(69,224,255,0.34)', 'rgba(153,70,255,0.28)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.018)']}
+            style={[styles.segmentButton, selectedRoomType === 'free' && styles.activeFreeSegment]}
+          >
+            <Ionicons color={selectedRoomType === 'free' ? colors.cyan : colors.muted} name="moon" size={18} />
+            <Text style={[styles.segmentText, selectedRoomType === 'free' && styles.activeSegmentText]}>Ücretsiz</Text>
+          </LinearGradient>
+        </Pressable>
+        <Pressable onPress={() => setSelectedRoomType('paid')} style={styles.segmentPressable}>
+          <LinearGradient
+            colors={selectedRoomType === 'paid' ? ['rgba(244,180,94,0.36)', 'rgba(255,79,185,0.24)', 'rgba(153,70,255,0.22)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.018)']}
+            style={[styles.segmentButton, selectedRoomType === 'paid' && styles.activePaidSegment]}
+          >
+            <Ionicons color={selectedRoomType === 'paid' ? colors.goldSoft : colors.muted} name="sparkles" size={18} />
+            <Text style={[styles.segmentText, selectedRoomType === 'paid' && styles.activeSegmentText]}>Ücretli</Text>
+          </LinearGradient>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <NightBackground>
       <SafeAreaView style={styles.safeArea}>
@@ -323,8 +353,8 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
                   </View>
                 </LinearGradient>
 
-                {renderSection('Ücretsiz Odalar', '4 kişi dolunca konuşma başlar', freeRooms, 'free')}
-                {renderSection('Ücretli Odalar', 'Sahipli oda, istekle katılım', paidRooms, 'paid')}
+                {renderRoomTypeSegment()}
+                {renderSection(selectedSectionTitle, selectedSectionHint, visibleRooms, selectedRoomType)}
               </>
             )}
           </View>
@@ -444,6 +474,51 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  segmentWrap: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(153,70,255,0.38)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    padding: 6,
+    shadowColor: colors.purple,
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+  },
+  segmentPressable: {
+    flex: 1,
+  },
+  segmentButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    height: 48,
+    justifyContent: 'center',
+  },
+  activeFreeSegment: {
+    borderColor: 'rgba(69,224,255,0.5)',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+  },
+  activePaidSegment: {
+    borderColor: 'rgba(244,180,94,0.54)',
+    shadowColor: colors.goldSoft,
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+  },
+  segmentText: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  activeSegmentText: {
+    color: colors.text,
+  },
   section: {
     borderRadius: radius.xl,
     borderWidth: 1,
@@ -525,7 +600,7 @@ const styles = StyleSheet.create({
   roomCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    minHeight: 214,
+    minHeight: 238,
     overflow: 'hidden',
     padding: spacing.sm,
   },
@@ -616,23 +691,23 @@ const styles = StyleSheet.create({
   },
   miniRoomScene: {
     alignItems: 'center',
-    height: 88,
+    height: 116,
     justifyContent: 'center',
-    marginTop: spacing.sm,
+    marginTop: 10,
     position: 'relative',
   },
   miniTable: {
     alignItems: 'center',
     backgroundColor: 'rgba(6,8,22,0.74)',
     borderColor: 'rgba(174,111,255,0.68)',
-    borderRadius: 35,
+    borderRadius: 27,
     borderWidth: 1,
-    height: 70,
+    height: 54,
     justifyContent: 'center',
     shadowColor: colors.cyan,
     shadowOpacity: 0.28,
     shadowRadius: 12,
-    width: 70,
+    width: 54,
   },
   paidMiniTable: {
     backgroundColor: 'rgba(48,28,20,0.78)',
@@ -666,15 +741,15 @@ const styles = StyleSheet.create({
     top: 0,
   },
   miniSeatRight: {
-    right: -2,
-    top: 29,
+    right: 0,
+    top: 40,
   },
   miniSeatBottom: {
     bottom: 0,
   },
   miniSeatLeft: {
-    left: -2,
-    top: 29,
+    left: 0,
+    top: 40,
   },
   emptyMiniSeatText: {
     color: colors.muted,
