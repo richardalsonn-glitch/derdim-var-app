@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ImageBackground, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,6 +75,7 @@ function NightBackground({ children }: { children: ReactNode }) {
 }
 
 export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
+  const { height, width } = useWindowDimensions();
   const [rooms, setRooms] = useState<VoiceRoom[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +84,19 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const [nowMs, setNowMs] = useState(Date.now());
   const [selectedRoomType, setSelectedRoomType] = useState<'free' | 'paid'>('free');
   const nightOpen = isDemoMode || isNightModeOpen();
+  const tiny = height < 720;
+  const compact = height < 800;
+  const horizontalPadding = width < 380 ? 12 : 16;
+  const contentGap = tiny ? 5 : compact ? 7 : 9;
+  const heroHeight = tiny ? 68 : compact ? 74 : 82;
+  const heroIconSize = tiny ? 38 : compact ? 42 : 46;
+  const cardHeight = tiny ? 160 : compact ? 170 : 182;
+  const miniSceneHeight = tiny ? 58 : compact ? 64 : 70;
+  const miniTableSize = tiny ? 32 : compact ? 36 : 40;
+  const miniSeatWidth = tiny ? 34 : 36;
+  const miniSeatHeight = tiny ? 28 : 30;
+  const miniSeatSideTop = (miniSceneHeight - miniSeatHeight) / 2;
+  const miniAvatarSize = tiny ? 16 : 18;
 
   const loadRooms = useCallback(async (silent = false) => {
     if (!silent) {
@@ -127,7 +141,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const visibleRooms = selectedRoomType === 'free' ? freeRooms : paidRooms;
   const selectedIsPaid = selectedRoomType === 'paid';
   const selectedSectionTitle = selectedIsPaid ? 'Ücretli Odalar' : 'Ücretsiz Odalar';
-  const selectedSectionHint = selectedIsPaid ? 'Sahipli oda, istekle katılım' : '4 kişi dolunca konuşma başlar';
+  const selectedSectionHint = selectedIsPaid ? 'Sahipli oda' : '4 kişi dolunca başlar';
 
   async function handleRoomPress(room: VoiceRoom) {
     const isMember = room.members.some((member) => member.userId === currentUserId);
@@ -191,13 +205,19 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 
   function renderMiniSeat(room: VoiceRoom, seatIndex: number, isPaid: boolean) {
     const member = room.members.find((item) => item.seatIndex === seatIndex);
-    const seatPositionStyle = [styles.miniSeatTop, styles.miniSeatRight, styles.miniSeatBottom, styles.miniSeatLeft][seatIndex];
+    const seatPositionStyle = [
+      { left: '50%' as const, marginLeft: -miniSeatWidth / 2, top: 0 },
+      { right: 0, top: miniSeatSideTop },
+      { bottom: 0, left: '50%' as const, marginLeft: -miniSeatWidth / 2 },
+      { left: 0, top: miniSeatSideTop },
+    ][seatIndex];
 
     return (
       <View
         key={seatIndex}
         style={[
           styles.miniSeat,
+          { borderRadius: miniSeatHeight / 2, height: miniSeatHeight, width: miniSeatWidth },
           isPaid && styles.paidMiniSeat,
           seatPositionStyle,
           member && styles.filledMiniSeat,
@@ -205,7 +225,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
         ]}
       >
         {member ? (
-          <Avatar avatar={getAvatarById(member.avatarId)} size={22} />
+          <Avatar avatar={getAvatarById(member.avatarId)} size={miniAvatarSize} />
         ) : (
           <Text style={styles.emptyMiniSeatText}>Boş</Text>
         )}
@@ -229,7 +249,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
       >
         <LinearGradient
           colors={isPaid ? ['rgba(244,180,94,0.2)', 'rgba(153,70,255,0.1)', 'rgba(8,10,32,0.78)'] : ['rgba(69,224,255,0.14)', 'rgba(153,70,255,0.12)', 'rgba(8,10,32,0.78)']}
-          style={[styles.roomCard, isPaid ? styles.paidRoomCard : styles.freeRoomCard, isFull && styles.fullRoomCard]}
+          style={[styles.roomCard, { height: cardHeight }, isPaid ? styles.paidRoomCard : styles.freeRoomCard, isFull && styles.fullRoomCard]}
         >
           <View pointerEvents="none" style={[styles.cardSheen, isPaid && styles.paidCardSheen]} />
           <View pointerEvents="none" style={[styles.cardAccent, isPaid ? styles.paidCardAccent : styles.freeCardAccent]} />
@@ -242,9 +262,9 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             <Text style={[styles.roomTag, isFull && styles.fullTag]}>{getRoomStateText(room)}</Text>
           </View>
 
-          <View style={styles.miniRoomScene}>
-            <View style={[styles.miniTable, isPaid && styles.paidMiniTable]}>
-              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={24} />
+          <View style={[styles.miniRoomScene, { height: miniSceneHeight }]}>
+            <View style={[styles.miniTable, { borderRadius: miniTableSize / 2, height: miniTableSize, width: miniTableSize }, isPaid && styles.paidMiniTable]}>
+              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={tiny ? 16 : 18} />
             </View>
             {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index, isPaid))}
           </View>
@@ -316,49 +336,47 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   return (
     <NightBackground>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                <Ionicons color={colors.text} name="chevron-back" size={30} />
-              </Pressable>
-              <View style={styles.headerCopy}>
-                <Text style={styles.headerTitle}>Gece Modu</Text>
-                <Text style={styles.headerSubtitle}>22:00 - 06:00 • Türkiye saati</Text>
-              </View>
+        <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding, paddingTop: tiny ? 4 : 6 }]}>
+          <View style={[styles.header, { minHeight: tiny ? 42 : 48 }]}>
+            <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: tiny ? 19 : 21, height: tiny ? 38 : 42, width: tiny ? 38 : 42 }]}>
+              <Ionicons color={colors.text} name="chevron-back" size={tiny ? 24 : 26} />
+            </Pressable>
+            <View style={styles.headerCopy}>
+              <Text style={[styles.headerTitle, { fontSize: tiny ? 28 : compact ? 31 : 34 }]}>Gece Modu</Text>
+              <Text style={[styles.headerSubtitle, { fontSize: tiny ? 12 : 13 }]}>22:00 - 06:00 • Türkiye saati</Text>
             </View>
-
-            {!nightOpen ? (
-              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)']} style={styles.closedCard}>
-                <Ionicons color={colors.goldSoft} name="moon" size={28} />
-                <Text style={styles.closedText}>{NIGHT_MODE_CLOSED_MESSAGE}</Text>
-              </LinearGradient>
-            ) : loading ? (
-              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)']} style={styles.loadingCard}>
-                <ActivityIndicator color={colors.cyan} />
-                <Text style={styles.loadingText}>Odalar hazırlanıyor...</Text>
-              </LinearGradient>
-            ) : (
-              <>
-                <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={styles.heroCard}>
-                  <View style={styles.heroIcon}>
-                    <Ionicons color={colors.goldSoft} name="moon" size={34} />
-                  </View>
-                  <View style={styles.heroCopy}>
-                    <Text style={styles.heroTitle}>Gece odaları</Text>
-                    <Text style={styles.heroText}>Masa çevresindeki koltuklardan birini seç.</Text>
-                  </View>
-                  <View style={styles.heroBadge}>
-                    <Text style={styles.heroBadgeText}>8 oda</Text>
-                  </View>
-                </LinearGradient>
-
-                {renderRoomTypeSegment()}
-                {renderSection(selectedSectionTitle, selectedSectionHint, visibleRooms, selectedRoomType)}
-              </>
-            )}
           </View>
-        </ScrollView>
+
+          {!nightOpen ? (
+            <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)']} style={styles.closedCard}>
+              <Ionicons color={colors.goldSoft} name="moon" size={28} />
+              <Text style={styles.closedText}>{NIGHT_MODE_CLOSED_MESSAGE}</Text>
+            </LinearGradient>
+          ) : loading ? (
+            <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)']} style={styles.loadingCard}>
+              <ActivityIndicator color={colors.cyan} />
+              <Text style={styles.loadingText}>Odalar hazırlanıyor...</Text>
+            </LinearGradient>
+          ) : (
+            <>
+              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.heroCard, { minHeight: heroHeight, paddingHorizontal: tiny ? 10 : 12, paddingVertical: tiny ? 8 : 10 }]}>
+                <View style={[styles.heroIcon, { borderRadius: heroIconSize / 2, height: heroIconSize, width: heroIconSize }]}>
+                  <Ionicons color={colors.goldSoft} name="moon" size={tiny ? 20 : 22} />
+                </View>
+                <View style={styles.heroCopy}>
+                  <Text style={[styles.heroTitle, { fontSize: tiny ? 16 : 17 }]}>Gece odaları</Text>
+                  <Text numberOfLines={1} style={[styles.heroText, { fontSize: tiny ? 11 : 12 }]}>Bir oda seç ve masaya otur.</Text>
+                </View>
+                <View style={styles.heroBadge}>
+                  <Text style={styles.heroBadgeText}>8 oda</Text>
+                </View>
+              </LinearGradient>
+
+              {renderRoomTypeSegment()}
+              {renderSection(selectedSectionTitle, selectedSectionHint, visibleRooms, selectedRoomType)}
+            </>
+          )}
+        </View>
       </SafeAreaView>
 
       <NoticeModal
@@ -384,45 +402,36 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 32,
-  },
   content: {
     alignSelf: 'center',
-    gap: spacing.md,
+    flex: 1,
     maxWidth: layout.maxWidth,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingBottom: 6,
     width: '100%',
   },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   backButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.075)',
     borderColor: 'rgba(153,70,255,0.45)',
-    borderRadius: 24,
     borderWidth: 1,
-    height: 48,
     justifyContent: 'center',
-    width: 48,
   },
   headerCopy: {
     flex: 1,
   },
   headerTitle: {
     color: colors.text,
-    fontSize: 36,
     fontWeight: '900',
   },
   headerSubtitle: {
     color: '#BFB4FF',
-    fontSize: 17,
     fontWeight: '700',
-    marginTop: 2,
+    marginTop: 0,
   },
   heroCard: {
     alignItems: 'center',
@@ -430,20 +439,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: spacing.md,
-    minHeight: 126,
+    gap: spacing.sm,
     overflow: 'hidden',
-    padding: spacing.md,
   },
   heroIcon: {
     alignItems: 'center',
     backgroundColor: 'rgba(153,70,255,0.24)',
     borderColor: 'rgba(174,111,255,0.42)',
-    borderRadius: 34,
     borderWidth: 1,
-    height: 68,
     justifyContent: 'center',
-    width: 68,
   },
   heroCopy: {
     flex: 1,
@@ -451,27 +455,25 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: colors.text,
-    fontSize: 21,
     fontWeight: '900',
   },
   heroText: {
     color: colors.muted,
-    fontSize: 15,
     fontWeight: '700',
-    lineHeight: 21,
-    marginTop: 5,
+    lineHeight: 16,
+    marginTop: 2,
   },
   heroBadge: {
     backgroundColor: 'rgba(153,70,255,0.34)',
     borderColor: 'rgba(255,79,185,0.48)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   heroBadgeText: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '900',
   },
   segmentWrap: {
@@ -480,8 +482,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 6,
-    padding: 6,
+    gap: 5,
+    padding: 4,
     shadowColor: colors.purple,
     shadowOpacity: 0.18,
     shadowRadius: 18,
@@ -495,8 +497,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 8,
-    height: 48,
+    gap: 7,
+    height: 40,
     justifyContent: 'center',
   },
   activeFreeSegment: {
@@ -513,7 +515,7 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     color: colors.muted,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
   },
   activeSegmentText: {
@@ -522,9 +524,9 @@ const styles = StyleSheet.create({
   section: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    gap: spacing.sm,
+    gap: 7,
     overflow: 'hidden',
-    padding: spacing.sm,
+    padding: 8,
     position: 'relative',
   },
   freeSection: {
@@ -563,9 +565,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 17,
     borderWidth: 1,
-    height: 34,
+    height: 28,
     justifyContent: 'center',
-    width: 34,
+    width: 28,
   },
   freeSectionIcon: {
     backgroundColor: 'rgba(69,224,255,0.12)',
@@ -577,14 +579,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '900',
     flexShrink: 1,
   },
   sectionHint: {
     color: colors.muted,
     flexShrink: 1,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     textAlign: 'right',
   },
@@ -592,7 +594,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: spacing.md,
+    rowGap: 8,
   },
   roomPressable: {
     width: '48%',
@@ -600,9 +602,9 @@ const styles = StyleSheet.create({
   roomCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    minHeight: 238,
+    minHeight: 0,
     overflow: 'hidden',
-    padding: spacing.sm,
+    padding: 8,
   },
   freeRoomCard: {
     borderColor: 'rgba(69,224,255,0.5)',
@@ -653,19 +655,19 @@ const styles = StyleSheet.create({
   roomName: {
     color: colors.text,
     flex: 1,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '900',
   },
   roomCount: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '900',
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
+    gap: 5,
+    marginTop: 5,
   },
   roomTag: {
     backgroundColor: 'rgba(69,224,255,0.12)',
@@ -673,11 +675,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     color: colors.cyan,
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '900',
     overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
   paidTag: {
     backgroundColor: 'rgba(244,180,94,0.15)',
@@ -693,7 +695,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 116,
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 5,
     position: 'relative',
   },
   miniTable: {
@@ -753,14 +755,14 @@ const styles = StyleSheet.create({
   },
   emptyMiniSeatText: {
     color: colors.muted,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
   },
   roomCardFooter: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.sm,
+    marginTop: 4,
   },
   timePill: {
     alignItems: 'center',
@@ -769,13 +771,13 @@ const styles = StyleSheet.create({
   },
   timeText: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '800',
   },
   priceText: {
     color: colors.goldSoft,
     flexShrink: 1,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
     textAlign: 'right',
   },
@@ -785,9 +787,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(126,135,255,0.7)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 38,
+    height: 30,
     justifyContent: 'center',
-    marginTop: spacing.sm,
+    marginTop: 5,
   },
   paidInlineButton: {
     backgroundColor: 'rgba(244,180,94,0.13)',
@@ -798,7 +800,7 @@ const styles = StyleSheet.create({
   },
   inlineButtonText: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '900',
   },
   closedCard: {
