@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +24,8 @@ import {
   subscribeToNightVoiceRoom,
 } from '../services/voiceRoomService';
 import { VoiceRoom, VoiceRoomJoinRequest, VoiceRoomMember } from '../types';
+
+const nightRoomBackground = require('../../assets/images/night-room-background.png');
 
 type ModalState = {
   title: string;
@@ -100,6 +102,20 @@ function clamp(value: number, min: number, max: number) {
 
 function getSeatPointerStyle(seatIndex: number) {
   return [styles.pointerTop, styles.pointerRight, styles.pointerBottom, styles.pointerLeft][seatIndex];
+}
+
+function RoomBackground({ children }: { children: ReactNode }) {
+  return (
+    <ImageBackground resizeMode="cover" source={nightRoomBackground} style={styles.container}>
+      <View pointerEvents="none" style={styles.backgroundDim} />
+      <LinearGradient
+        colors={['rgba(5,6,20,0.28)', 'rgba(5,6,20,0.38)', 'rgba(5,6,20,0.48)']}
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+      />
+      {children}
+    </ImageBackground>
+  );
 }
 
 export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom'>) {
@@ -397,20 +413,20 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
 
   if (loading) {
     return (
-      <LinearGradient colors={[...gradients.background]} style={styles.container}>
+      <RoomBackground>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingBody}>
             <ActivityIndicator color={colors.cyan} />
             <Text style={styles.loadingText}>Oda hazırlanıyor...</Text>
           </View>
         </SafeAreaView>
-      </LinearGradient>
+      </RoomBackground>
     );
   }
 
   if (!room) {
     return (
-      <LinearGradient colors={[...gradients.background]} style={styles.container}>
+      <RoomBackground>
         <SafeAreaView style={styles.safeArea}>
           <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding }]}>
             <Header compact={compact} onBack={() => navigation.goBack()} roomType="Gece Modu Odası" />
@@ -419,7 +435,7 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
             </View>
           </View>
         </SafeAreaView>
-      </LinearGradient>
+      </RoomBackground>
     );
   }
 
@@ -428,7 +444,7 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   const roomStatusLabel = getRoomStatusLabel(room);
 
   return (
-    <LinearGradient colors={[...gradients.background]} style={styles.container}>
+    <RoomBackground>
       <View pointerEvents="none" style={[styles.pageGlow, styles.pageGlowTop]} />
       <View pointerEvents="none" style={[styles.pageGlow, styles.pageGlowBottom]} />
       <SafeAreaView style={styles.safeArea}>
@@ -571,7 +587,7 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
           <View style={styles.requestList}>{room.requests.map(renderRequestRow)}</View>
         </NoticeModal>
       </SafeAreaView>
-    </LinearGradient>
+    </RoomBackground>
   );
 }
 
@@ -637,6 +653,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  backgroundDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5,6,20,0.35)',
   },
   safeArea: {
     flex: 1,
