@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from './Avatar';
 import { colors, layout, radius, spacing } from '../constants/theme';
@@ -13,7 +13,8 @@ type FriendIncomingCallModalProps = {
   actionPending?: boolean;
   callerName: string;
   callerProfile: FriendSummary | null;
-  onAccept: () => void;
+  mode?: 'incoming' | 'outgoing';
+  onAccept?: () => void;
   onMessage: () => void;
   onReject: () => void;
   visible: boolean;
@@ -82,12 +83,14 @@ export function FriendIncomingCallModal({
   actionPending = false,
   callerName,
   callerProfile,
+  mode = 'incoming',
   onAccept,
   onMessage,
   onReject,
   visible,
 }: FriendIncomingCallModalProps) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const ringPulse = useRef(new Animated.Value(0)).current;
   const glowPulse = useRef(new Animated.Value(0)).current;
   const dotPulse = useRef(new Animated.Value(0)).current;
@@ -100,7 +103,9 @@ export function FriendIncomingCallModal({
   const actionWidth = compact ? 82 : 96;
   const titleSize = compact ? 44 : 52;
   const contentMaxWidth = Math.min(layout.maxWidth, width);
+  const headerTopPadding = Math.max(insets.top + (short ? spacing.lg : spacing.xl), short ? 56 : 68);
   const avatar = useMemo(() => getAvatarById(callerProfile?.avatarId ?? defaultProfile.avatarId), [callerProfile?.avatarId]);
+  const isOutgoing = mode === 'outgoing';
 
   useEffect(() => {
     if (!visible) {
@@ -161,15 +166,15 @@ export function FriendIncomingCallModal({
           ))}
         </View>
 
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
           <View style={[styles.content, { maxWidth: contentMaxWidth }]}>
-            <View style={[styles.header, short && styles.headerShort]}>
-              <Text style={styles.eyebrow}>ARKADAŞIN SENİ ARIYOR</Text>
+            <View style={[styles.header, { paddingTop: headerTopPadding }]}>
+              <Text style={styles.eyebrow}>{isOutgoing ? 'ARKADAŞIN ARANIYOR' : 'ARKADAŞIN SENİ ARIYOR'}</Text>
               <Text adjustsFontSizeToFit minimumFontScale={0.76} numberOfLines={1} style={[styles.callerName, { fontSize: titleSize }]}>
                 {callerName}
               </Text>
               <View style={styles.callingRow}>
-                <Text style={styles.callingText}>Seni arıyor</Text>
+                <Text style={styles.callingText}>{isOutgoing ? 'Aranıyor' : 'Seni arıyor'}</Text>
                 <View style={styles.dots}>
                   {[0, 1, 2].map((dot) => (
                     <Animated.View
@@ -216,15 +221,17 @@ export function FriendIncomingCallModal({
             </View>
 
             <View style={[styles.actions, { gap: compact ? 10 : 22 }]}>
-              <CallActionButton
-                disabled={actionPending}
-                icon="call"
-                label="Reddet"
-                onPress={onReject}
-                size={actionSize}
-                variant="reject"
-                wrapWidth={actionWidth}
-              />
+              {isOutgoing ? null : (
+                <CallActionButton
+                  disabled={actionPending}
+                  icon="call"
+                  label="Reddet"
+                  onPress={onReject}
+                  size={actionSize}
+                  variant="reject"
+                  wrapWidth={actionWidth}
+                />
+              )}
               <CallActionButton
                 disabled={actionPending}
                 icon="chatbubble-ellipses-outline"
@@ -237,17 +244,19 @@ export function FriendIncomingCallModal({
               <CallActionButton
                 disabled={actionPending}
                 icon="call"
-                label="Kabul Et"
-                onPress={onAccept}
+                label={isOutgoing ? 'İptal Et' : 'Kabul Et'}
+                onPress={isOutgoing ? onReject : onAccept ?? onReject}
                 size={actionSize}
-                variant="accept"
+                variant={isOutgoing ? 'reject' : 'accept'}
                 wrapWidth={actionWidth}
               />
             </View>
 
             <View style={[styles.footer, short && styles.footerShort]}>
               <Ionicons color="#E8B7FF" name="shield-checkmark-outline" size={24} />
-              <Text style={styles.footerText}>Kabul ederseniz 5 dakikalık görüşme başlayacak</Text>
+              <Text style={styles.footerText}>
+                {isOutgoing ? 'Arkadaşın kabul ederse 5 dakikalık görüşme başlayacak' : 'Kabul ederseniz 5 dakikalık görüşme başlayacak'}
+              </Text>
             </View>
           </View>
         </SafeAreaView>

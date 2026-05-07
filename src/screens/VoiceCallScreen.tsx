@@ -12,11 +12,15 @@ import { NoticeModal } from '../components/NoticeModal';
 import { isDemoMode, isLiveKitEnabled } from '../config/features';
 import { colors, gradients, layout, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { getAvatarById, topics } from '../data/mockData';
+import { getAvatarById, gifts, topics } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
+import { logSafeDebug } from '../lib/safeLogger';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import { getCurrentUser } from '../services/authService';
-import { getActiveMatch, leaveQueue } from '../services/matchService';
+import { stopAllCallSounds } from '../services/callSoundService';
+import { endFriendCallInvite, getFriendCallInviteByRoom, subscribeToFriendCallRoom } from '../services/friendCallService';
+import { endMatchSessionReliable, getActiveMatch, isMatchSessionClosed, leaveQueue, listenForMatchSessionEndReliable } from '../services/matchService';
 import { requestMicrophonePermission } from '../services/permissionsService';
 import { sendFriendshipRequest } from '../services/socialService';
 import { joinRoom, leaveRoom, toggleMute, toggleSpeaker } from '../services/voiceService';
@@ -47,6 +51,21 @@ type ControlButtonProps = {
   active: boolean;
   size: number;
   onPress: () => void;
+};
+
+type CallBonusPayload = {
+  type?: 'time_bonus' | 'gift_bonus';
+  eventId?: string;
+  seconds?: number;
+  bonusSeconds?: number;
+  senderId?: string | null;
+  senderUsername?: string | null;
+  roomId?: string | null;
+  giftId?: string | null;
+  giftName?: string | null;
+  giftSymbol?: string | null;
+  giftAccent?: [string, string] | string[] | null;
+  createdAt?: string;
 };
 
 type Metrics = {
@@ -102,9 +121,9 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function getMetrics(width: number, height: number): Metrics {
-  const compact = width < 360 || height < 760;
-  const short = height < 700;
-  const horizontalPadding = width < 350 ? 12 : 16;
+  const compact = width <= 390 || height <= 844;
+  const short = height < 740;
+  const horizontalPadding = width <= 390 ? 12 : 16;
   const gap = short ? 6 : compact ? 8 : 10;
   const tinyGap = short ? 4 : 6;
   const usableWidth = Math.min(layout.maxWidth, width) - horizontalPadding * 2;
@@ -251,7 +270,16 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   } = useAppState();
   const { width, height } = useWindowDimensions();
   const metrics = useMemo(() => getMetrics(width, height), [width, height]);
+  const activeMatchSnapshot = useMemo(() => getActiveMatch(), []);
   const realtimePartner = useMemo(() => buildRealtimePartner(route.params), [route.params]);
+  const isFriendCallSession = Boolean(route.params?.friendCall || route.params?.mode === 'friend_call');
+  const matchRoomId = useMemo(() => {
+    const fromRoute = route.params?.matchRoomId;
+    const fromLegacyRoute = (route.params as { roomId?: string } | undefined)?.roomId;
+    const fromActiveMatch = activeMatchSnapshot?.queue.match_room_id ?? activeMatchSnapshot?.queue.room_id;
+    const resolved = fromRoute ?? fromLegacyRoute ?? fromActiveMatch ?? null;
+    return typeof resolved === 'string' && resolved.trim().length > 0 ? resolved.trim() : null;
+  }, [activeMatchSnapshot?.queue.match_room_id, activeMatchSnapshot?.queue.room_id, route.params]);
   const isRealtimeSession = Boolean(route.params?.matchReady && realtimePartner);
   const isDemoSession = isDemoMode && !isRealtimeSession;
   const [phase, setPhase] = useState<CallPhase>(isRealtimeSession ? 'matched' : 'searching');
@@ -261,6 +289,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   const [giftVisible, setGiftVisible] = useState(false);
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
   const [giftOverlayVisible, setGiftOverlayVisible] = useState(false);
+  const [giftOverlayCaption, setGiftOverlayCaption] = useState('Süreye bonus ekleniyor...');
   const [friendNoticeVisible, setFriendNoticeVisible] = useState(false);
   const [friendNoticeMessage, setFriendNoticeMessage] = useState('Arkadaşlık isteği gönderildi.');
   const [blockConfirmVisible, setBlockConfirmVisible] = useState(false);
@@ -288,17 +317,28 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   const partnerAvatar = useMemo(() => getAvatarById(partner.avatarId), [partner.avatarId]);
   const partnerBadge = getBadge(partner.plan);
   const giftBonusSeconds = 600;
+  const callDurationSeconds = route.params?.durationSeconds ?? CALL_SECONDS;
   const lastCountdownAlertRef = useRef<number | null>(null);
   const countdownAudioStartedRef = useRef(false);
   const countdownAudioRef = useRef<AudioPlayer | null>(null);
   const ringingAudioRef = useRef<AudioPlayer | null>(null);
   const ringingFallbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const callBonusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const processedBonusEventsRef = useRef<Set<string>>(new Set());
+  const processedGiftEventsRef = useRef<Set<string>>(new Set());
+  const giftBonusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceJoinedRef = useRef(false);
+  const hasLeftCallRef = useRef(false);
+  const isEndingRef = useRef(false);
+  const cleanupCompletedRef = useRef(false);
+  const sessionEndCleanupRef = useRef<null | (() => Promise<void>)>(null);
+  const sessionEndPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const remainingLikes = Math.max(0, dailyAppreciationLimit - dailyAppreciationUsed);
   const blockedIdsKey = blockedUserIds.join('|');
 
   const { remainingSeconds, addSeconds, reset, setIsRunning } = useCountdownTimer({
-    initialSeconds: route.params?.durationSeconds ?? CALL_SECONDS,
+    initialSeconds: callDurationSeconds,
     autoStart: false,
     onExpire: () => {
       finishConversation();
@@ -313,22 +353,223 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     [friendRequests, incomingFriendRequestId],
   );
 
+  function getPayloadEventId(payload: CallBonusPayload) {
+    return typeof payload.eventId === 'string' && payload.eventId.trim().length > 0
+      ? payload.eventId.trim()
+      : null;
+  }
+
+  function rememberRealtimeEvent(processedEvents: Set<string>, eventId: string | null) {
+    if (!eventId) {
+      return true;
+    }
+
+    if (processedEvents.has(eventId)) {
+      return false;
+    }
+
+    processedEvents.add(eventId);
+
+    if (processedEvents.size > 80) {
+      const firstEventId = processedEvents.values().next().value;
+
+      if (firstEventId) {
+        processedEvents.delete(firstEventId);
+      }
+    }
+
+    return true;
+  }
+
+  function hideGiftOverlay() {
+    if (giftBonusTimeoutRef.current) {
+      clearTimeout(giftBonusTimeoutRef.current);
+      giftBonusTimeoutRef.current = null;
+    }
+
+    setGiftOverlayVisible(false);
+    setSelectedGift(null);
+    setGiftOverlayCaption('Süreye bonus ekleniyor...');
+  }
+
+  function getGiftFromPayload(payload: CallBonusPayload): GiftItem | null {
+    const giftId = typeof payload.giftId === 'string' && payload.giftId.trim().length > 0
+      ? payload.giftId.trim()
+      : null;
+    const catalogGift = giftId ? gifts.find((gift) => gift.id === giftId) : null;
+
+    if (catalogGift) {
+      return catalogGift;
+    }
+
+    const giftName = typeof payload.giftName === 'string' && payload.giftName.trim().length > 0
+      ? payload.giftName.trim()
+      : null;
+    const giftSymbol = typeof payload.giftSymbol === 'string' && payload.giftSymbol.trim().length > 0
+      ? payload.giftSymbol.trim()
+      : null;
+
+    if (!giftName && !giftSymbol) {
+      return null;
+    }
+
+    const firstAccent = Array.isArray(payload.giftAccent) && typeof payload.giftAccent[0] === 'string'
+      ? payload.giftAccent[0]
+      : '#FF4FB9';
+    const secondAccent = Array.isArray(payload.giftAccent) && typeof payload.giftAccent[1] === 'string'
+      ? payload.giftAccent[1]
+      : '#8F46FF';
+
+    return {
+      id: giftId ?? `remote-gift-${giftName ?? 'gift'}`,
+      name: giftName ?? 'Hediye',
+      symbol: giftSymbol ?? '🎁',
+      price: '',
+      caption: '',
+      accent: [firstAccent, secondAccent],
+    };
+  }
+
+  function showGiftOverlayFromPayload(payload: CallBonusPayload, forceLocalGift = false) {
+    const gift = getGiftFromPayload(payload);
+
+    if (!gift) {
+      return;
+    }
+
+    const eventId = getPayloadEventId(payload);
+
+    if (!rememberRealtimeEvent(processedGiftEventsRef.current, eventId)) {
+      return;
+    }
+
+    if (giftBonusTimeoutRef.current) {
+      clearTimeout(giftBonusTimeoutRef.current);
+      giftBonusTimeoutRef.current = null;
+    }
+
+    const senderUsername = typeof payload.senderUsername === 'string' && payload.senderUsername.trim().length > 0
+      ? payload.senderUsername.trim()
+      : partner.username;
+    const isLocalSender = forceLocalGift || Boolean(payload.senderId && payload.senderId === currentUserIdRef.current);
+
+    setSelectedGift(gift);
+    setGiftOverlayCaption(isLocalSender ? `${gift.name} gönderildi` : `${senderUsername} sana ${gift.name} gönderdi`);
+    setGiftOverlayVisible(true);
+
+    giftBonusTimeoutRef.current = setTimeout(() => {
+      giftBonusTimeoutRef.current = null;
+      setGiftOverlayVisible(false);
+    }, 10000);
+  }
+
+  function applyCallBonus(payload: CallBonusPayload) {
+    const seconds = Math.floor(Number(payload.bonusSeconds ?? payload.seconds ?? 0));
+
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return;
+    }
+
+    if (!rememberRealtimeEvent(processedBonusEventsRef.current, getPayloadEventId(payload))) {
+      return;
+    }
+
+    addSeconds(seconds);
+  }
+
+  function handleCallBonusPayload(payload: CallBonusPayload, options?: { forceLocalGift?: boolean }) {
+    showGiftOverlayFromPayload(payload, options?.forceLocalGift ?? false);
+    applyCallBonus(payload);
+  }
+
+  function sendCallBonus(seconds: number, gift: GiftItem) {
+    const eventId = `gift-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const payload: CallBonusPayload = {
+      type: 'gift_bonus',
+      eventId,
+      seconds,
+      bonusSeconds: seconds,
+      senderId: currentUserIdRef.current,
+      senderUsername: profile.username,
+      roomId: matchRoomId,
+      giftId: gift.id,
+      giftName: gift.name,
+      giftSymbol: gift.symbol,
+      giftAccent: gift.accent,
+      createdAt: new Date().toISOString(),
+    };
+
+    handleCallBonusPayload(payload, { forceLocalGift: true });
+
+    if (!isRealtimeSession || !matchRoomId || !callBonusChannelRef.current) {
+      return;
+    }
+
+    callBonusChannelRef.current.send({
+      type: 'broadcast',
+      event: 'time_bonus',
+      payload,
+    }).then((status) => {
+      if (status !== 'ok') {
+        logSafeDebug('[call-bonus] broadcast skipped', `status:${status}`);
+      }
+    }).catch((error) => {
+      logSafeDebug('[call-bonus] broadcast failed', error, {
+        functionName: 'sendCallBonus',
+        source: 'supabase_realtime',
+      });
+    });
+  }
+
   async function disconnectVoiceRoom() {
     voiceJoinedRef.current = false;
     const result = await leaveRoom();
 
     if (result.error) {
-      console.warn('[voice] leaveRoom failed:', result.error.message);
+      logSafeDebug('[voice] leaveRoom skipped', result.error);
     }
   }
 
-  async function leaveRealtimeMatchAndGoHome() {
-    await disconnectVoiceRoom();
-    const result = await leaveQueue();
-
-    if (result.error) {
-      console.warn('[match] leaveQueue failed:', result.error.message);
+  async function cleanupRealtimeSessionAndGoHome(notifyPeer: boolean) {
+    if (cleanupCompletedRef.current || hasLeftCallRef.current || isEndingRef.current) {
+      return;
     }
+
+    isEndingRef.current = true;
+    hasLeftCallRef.current = true;
+    stopAllCallSounds();
+    stopRingingSound();
+    setIsRunning(false);
+
+    const cleanup = sessionEndCleanupRef.current;
+    sessionEndCleanupRef.current = null;
+
+    if (cleanup) {
+      await cleanup();
+    }
+
+    if (notifyPeer) {
+      const endResult = isFriendCallSession
+        ? await endFriendCallInvite(matchRoomId)
+        : await endMatchSessionReliable(matchRoomId);
+
+      if (endResult.error) {
+        logSafeDebug('[call] end session local cleanup fallback', endResult.error);
+      }
+    }
+
+    await disconnectVoiceRoom();
+
+    if (!isFriendCallSession) {
+      const leaveResult = await leaveQueue();
+
+      if (leaveResult.error) {
+        logSafeDebug('[match] leave after end skipped', leaveResult.error);
+      }
+    }
+
+    cleanupCompletedRef.current = true;
+    isEndingRef.current = false;
 
     navigation.reset({
       index: 0,
@@ -336,7 +577,12 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     });
   }
 
+  async function leaveRealtimeMatchAndGoHome() {
+    await cleanupRealtimeSessionAndGoHome(true);
+  }
+
   async function returnHomeSafely() {
+    stopAllCallSounds();
     stopRingingSound();
 
     if (isRealtimeSession) {
@@ -464,6 +710,27 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     return () => clearInterval(timerId);
   }, []);
 
+  useEffect(() => () => {
+    if (giftBonusTimeoutRef.current) {
+      clearTimeout(giftBonusTimeoutRef.current);
+      giftBonusTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void getCurrentUser().then((result) => {
+      if (mounted) {
+        currentUserIdRef.current = result.data?.id ?? null;
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -519,14 +786,139 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     setIncomingFriendRequestId(null);
     setIncomingFriendPrompted(false);
     setGiftVisible(false);
-    setGiftOverlayVisible(false);
-    setSelectedGift(null);
+    hideGiftOverlay();
     setMicEnabled(true);
     setSpeakerEnabled(true);
     setPeerMuted(false);
-    reset(CALL_SECONDS, true);
+    reset(callDurationSeconds, true);
     setIsRunning(true);
-  }, [isRealtimeSession, realtimePartner, reset, setIsRunning]);
+  }, [callDurationSeconds, isRealtimeSession, realtimePartner, reset, setIsRunning]);
+
+  useEffect(() => {
+    if (!isRealtimeSession || !matchRoomId) {
+      if (isRealtimeSession && !matchRoomId) {
+        logSafeDebug('[match] missing matchRoomId in VoiceCallScreen', {
+          routeMatchRoomId: route.params?.matchRoomId,
+          routeRoomId: (route.params as { roomId?: string } | undefined)?.roomId,
+          activeMatchRoomId: activeMatchSnapshot?.queue.match_room_id,
+          activeRoomId: activeMatchSnapshot?.queue.room_id,
+        });
+      }
+      return undefined;
+    }
+
+    if (isFriendCallSession) {
+      const channel = subscribeToFriendCallRoom(matchRoomId, (invite) => {
+        if ((invite.status === 'ended' || invite.status === 'cancelled') && !cleanupCompletedRef.current && !isEndingRef.current) {
+          void cleanupRealtimeSessionAndGoHome(false);
+        }
+      });
+
+      sessionEndCleanupRef.current = channel
+        ? async () => {
+          await supabase.removeChannel(channel);
+        }
+        : null;
+
+      sessionEndPollingRef.current = setInterval(() => {
+        if (cleanupCompletedRef.current || isEndingRef.current) {
+          return;
+        }
+
+        void getFriendCallInviteByRoom(matchRoomId).then((result) => {
+          if (
+            (result.data?.status === 'ended' || result.data?.status === 'cancelled')
+            && !cleanupCompletedRef.current
+            && !isEndingRef.current
+          ) {
+            void cleanupRealtimeSessionAndGoHome(false);
+          }
+        });
+      }, 2000);
+
+      return () => {
+        if (sessionEndPollingRef.current) {
+          clearInterval(sessionEndPollingRef.current);
+          sessionEndPollingRef.current = null;
+        }
+
+        const cleanup = sessionEndCleanupRef.current;
+        sessionEndCleanupRef.current = null;
+
+        if (cleanup) {
+          void cleanup();
+        }
+      };
+    }
+
+    logSafeDebug('[match] listen end session start', { matchRoomId }, { functionName: 'VoiceCallScreen.listenForMatchSessionEndReliable', table: 'matchmaking_queue', rpc: 'end_match_session' });
+    const listenResult = listenForMatchSessionEndReliable(matchRoomId, () => {
+      logSafeDebug('[match] realtime ended event received', { matchRoomId }, { functionName: 'VoiceCallScreen.realtimeEndHandler', table: 'matchmaking_queue' });
+      if (cleanupCompletedRef.current || isEndingRef.current) {
+        return;
+      }
+      void cleanupRealtimeSessionAndGoHome(false);
+    });
+
+    sessionEndCleanupRef.current = listenResult.data;
+    sessionEndPollingRef.current = setInterval(() => {
+      if (cleanupCompletedRef.current || isEndingRef.current) {
+        return;
+      }
+
+      void isMatchSessionClosed(matchRoomId).then((result) => {
+        if (result.data && !cleanupCompletedRef.current && !isEndingRef.current) {
+          logSafeDebug('[match] polling ended event received', { matchRoomId }, { functionName: 'VoiceCallScreen.pollSessionEnd', table: 'matchmaking_queue' });
+          void cleanupRealtimeSessionAndGoHome(false);
+        }
+      });
+    }, 2000);
+
+    return () => {
+      if (sessionEndPollingRef.current) {
+        clearInterval(sessionEndPollingRef.current);
+        sessionEndPollingRef.current = null;
+      }
+
+      const cleanup = sessionEndCleanupRef.current;
+      sessionEndCleanupRef.current = null;
+
+      if (cleanup) {
+        void cleanup();
+      }
+    };
+  }, [activeMatchSnapshot?.queue.match_room_id, activeMatchSnapshot?.queue.room_id, isFriendCallSession, isRealtimeSession, matchRoomId, route.params]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isRealtimeSession || !matchRoomId) {
+      return undefined;
+    }
+
+    const channel = supabase
+      .channel(`call-bonus:${matchRoomId}`, {
+        config: {
+          broadcast: { self: true },
+        },
+      })
+      .on('broadcast', { event: 'time_bonus' }, ({ payload }) => {
+        handleCallBonusPayload(payload as CallBonusPayload);
+      })
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          logSafeDebug('[call-bonus] realtime reconnect', `status:${status}`);
+        }
+      });
+
+    callBonusChannelRef.current = channel;
+
+    return () => {
+      if (callBonusChannelRef.current === channel) {
+        callBonusChannelRef.current = null;
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [isRealtimeSession, matchRoomId]);
 
   useEffect(() => {
     if (!microphonePermissionGranted || !isMatched || voiceJoinedRef.current) {
@@ -537,7 +929,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
 
     const connectVoice = async () => {
       if (!isLiveKitEnabled) {
-        const joinResult = await joinRoom(partner.id);
+        const joinResult = await joinRoom(partner.id, isFriendCallSession ? matchRoomId : null);
 
         if (cancelled) {
           return;
@@ -565,7 +957,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
         return;
       }
 
-      const joinResult = await joinRoom(partner.id);
+      const joinResult = await joinRoom(partner.id, isFriendCallSession ? matchRoomId : null);
 
       if (cancelled) {
         if (joinResult.data) {
@@ -590,7 +982,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     return () => {
       cancelled = true;
     };
-  }, [isMatched, microphonePermissionGranted]);
+  }, [isFriendCallSession, isMatched, matchRoomId, microphonePermissionGranted, partner.id]);
 
   useEffect(() => {
     if (isMatched) {
@@ -692,11 +1084,10 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     setSpeakerEnabled(true);
     setPeerMuted(false);
     setGiftVisible(false);
-    setGiftOverlayVisible(false);
-    setSelectedGift(null);
+    hideGiftOverlay();
     setIncomingFriendRequestId(null);
     setIncomingFriendPrompted(false);
-    reset(CALL_SECONDS, false);
+    reset(callDurationSeconds, false);
     setIsRunning(false);
   }
 
@@ -726,7 +1117,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
         if (current <= 1) {
           clearInterval(timerId);
           setPhase('matched');
-          reset(CALL_SECONDS, true);
+          reset(callDurationSeconds, true);
           return 0;
         }
 
@@ -764,10 +1155,10 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }, [isDemoSession, isRealtimeSession]);
 
   useEffect(() => () => {
-    if (isRealtimeSession) {
+    if (isRealtimeSession && !isFriendCallSession && !hasLeftCallRef.current) {
       void leaveQueue();
     }
-  }, [isRealtimeSession]);
+  }, [isFriendCallSession, isRealtimeSession]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -780,7 +1171,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
 
   function beginNextMatch() {
     if (isRealtimeSession) {
-      void leaveRealtimeMatchAndGoHome();
+      void cleanupRealtimeSessionAndGoHome(true);
       return;
     }
 
@@ -789,14 +1180,16 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }
 
   function finishConversation() {
+    stopAllCallSounds();
     stopRingingSound();
     setIsRunning(false);
-    void disconnectVoiceRoom();
 
     if (isRealtimeSession) {
-      setReviewVisible(true);
+      void cleanupRealtimeSessionAndGoHome(true);
       return;
     }
+
+    void disconnectVoiceRoom();
 
     if (autoContinue) {
       beginNextMatch();
@@ -808,16 +1201,11 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
 
   function handleGiftSelect(gift: GiftItem) {
     setGiftVisible(false);
-    setSelectedGift(gift);
-    setGiftOverlayVisible(true);
-    setTimeout(() => {
-      setGiftOverlayVisible(false);
-      addSeconds(giftBonusSeconds);
-    }, 10000);
+    sendCallBonus(giftBonusSeconds, gift);
   }
 
   function handleLike() {
-    if (likedThisMatch) {
+    if (isFriendCallSession || likedThisMatch) {
       return;
     }
 
@@ -842,11 +1230,12 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }
 
   function handlePass() {
+    stopAllCallSounds();
     stopRingingSound();
     void disconnectVoiceRoom();
 
     if (isRealtimeSession) {
-      void leaveRealtimeMatchAndGoHome();
+      void cleanupRealtimeSessionAndGoHome(true);
       return;
     }
 
@@ -855,6 +1244,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
   }
 
   function handleBlockConfirmed() {
+    stopAllCallSounds();
     stopRingingSound();
     void disconnectVoiceRoom();
     blockUser(getPartnerSummary(partner));
@@ -862,7 +1252,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
     setReviewVisible(false);
 
     if (isRealtimeSession) {
-      void leaveRealtimeMatchAndGoHome();
+      void cleanupRealtimeSessionAndGoHome(true);
       return;
     }
 
@@ -965,10 +1355,10 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
 
               <View style={styles.headerCopy}>
                 <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.headerTitle}>
-                  Eşleştirme
+                  {isFriendCallSession ? 'Arkadaş Görüşmesi' : 'Eşleştirme'}
                 </Text>
                 <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.headerSubtitle}>
-                  Seni anlayacak biri aranıyor...
+                  {isFriendCallSession ? 'Arkadaşınla güvenli görüşme' : 'Seni anlayacak biri aranıyor...'}
                 </Text>
               </View>
 
@@ -1052,22 +1442,24 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
             </View>
           </View>
 
-          <View style={styles.autoSection}>
-            <View style={[styles.autoCard, { height: metrics.autoHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
-              <View style={styles.autoCopy}>
-                <Text adjustsFontSizeToFit minimumFontScale={0.88} numberOfLines={1} style={styles.autoTitle}>
-                  Otomatik eşleşmeye devam et
-                </Text>
-                <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.autoSubtitle}>
-                  Görüşme bitince sıradaki kişiye geç.
-                </Text>
-              </View>
+          {!isFriendCallSession ? (
+            <View style={styles.autoSection}>
+              <View style={[styles.autoCard, { height: metrics.autoHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
+                <View style={styles.autoCopy}>
+                  <Text adjustsFontSizeToFit minimumFontScale={0.88} numberOfLines={1} style={styles.autoTitle}>
+                    Otomatik eşleşmeye devam et
+                  </Text>
+                  <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.autoSubtitle}>
+                    Görüşme bitince sıradaki kişiye geç.
+                  </Text>
+                </View>
 
-              <Pressable onPress={() => setAutoContinue((current) => !current)} style={[styles.toggle, autoContinue && styles.toggleActive]}>
-                <View style={[styles.toggleKnob, autoContinue && styles.toggleKnobActive]} />
-              </Pressable>
+                <Pressable onPress={() => setAutoContinue((current) => !current)} style={[styles.toggle, autoContinue && styles.toggleActive]}>
+                  <View style={[styles.toggleKnob, autoContinue && styles.toggleKnobActive]} />
+                </Pressable>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.ringSection}>
             <View style={[styles.ringWrap, { minHeight: metrics.ring + metrics.gift * 0.5, marginBottom: metrics.short ? 12 : 14 }]}>
@@ -1090,7 +1482,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
                 title={isMatched ? 'Görüşme Başladı' : 'Seni anlayacak biri aranıyor...'}
                 titleIcon={isMatched ? 'people' : 'pulse'}
                 tone="purple"
-                totalSeconds={isMatched ? Math.max(CALL_SECONDS, remainingSeconds) : SEARCH_SECONDS}
+                totalSeconds={isMatched ? Math.max(callDurationSeconds, remainingSeconds) : SEARCH_SECONDS}
               />
 
                 <Pressable
@@ -1120,7 +1512,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
             </View>
           </View>
 
-          <View style={styles.bottomSection}>
+          <View style={[styles.bottomSection, isFriendCallSession && styles.bottomSectionFriend]}>
             <View style={[styles.topicCard, styles.topicCardHidden, { height: metrics.topicHeight, paddingHorizontal: metrics.compact ? 10 : 12, paddingVertical: metrics.short ? 8 : 10 }]}>
               <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.topicTitle}>
                 Konu seç
@@ -1138,7 +1530,8 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
               </View>
             </View>
 
-            <View style={[styles.likeCard, { height: metrics.likeHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
+            {!isFriendCallSession ? (
+              <View style={[styles.likeCard, { height: metrics.likeHeight, paddingHorizontal: metrics.compact ? 10 : 12 }]}>
               <View style={styles.likeCopy}>
                 <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.likeText}>
                   Beğenirseniz süre uzar.
@@ -1159,7 +1552,8 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
                   </Text>
                 </LinearGradient>
               </Pressable>
-            </View>
+              </View>
+            ) : null}
 
             <View style={[styles.bottomBar, { height: metrics.bottomHeight, paddingHorizontal: metrics.compact ? 10 : 12, paddingVertical: metrics.short ? 8 : 10 }]}>
               <View style={styles.bottomLeft}>
@@ -1187,26 +1581,28 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
                 </Pressable>
               </View>
 
-              <Pressable onPress={handlePass} style={[styles.skipButton, { width: metrics.skipWidth }]}>
-                <LinearGradient colors={['rgba(139, 53, 255, 0.98)', 'rgba(255, 81, 173, 0.98)']} style={styles.skipGradient}>
-                  <Ionicons color={colors.text} name="play-skip-forward" size={20} />
-                  <View style={styles.skipTextWrap}>
-                    <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.skipTitle}>
-                      Pas Geç
-                    </Text>
-                    <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.skipSubtitle}>
-                      Sonraki
-                    </Text>
-                  </View>
-                </LinearGradient>
-              </Pressable>
+              {!isFriendCallSession ? (
+                <Pressable onPress={handlePass} style={[styles.skipButton, { width: metrics.skipWidth }]}>
+                  <LinearGradient colors={['rgba(139, 53, 255, 0.98)', 'rgba(255, 81, 173, 0.98)']} style={styles.skipGradient}>
+                    <Ionicons color={colors.text} name="play-skip-forward" size={20} />
+                    <View style={styles.skipTextWrap}>
+                      <Text adjustsFontSizeToFit minimumFontScale={0.85} numberOfLines={1} style={styles.skipTitle}>
+                        Pas Geç
+                      </Text>
+                      <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.skipSubtitle}>
+                        Sonraki
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         </View>
       </SafeAreaView>
 
       <GiftModal onClose={() => setGiftVisible(false)} onSelect={handleGiftSelect} visible={giftVisible} />
-      <GiftCelebrationOverlay gift={selectedGift} visible={giftOverlayVisible} />
+      <GiftCelebrationOverlay caption={giftOverlayCaption} gift={selectedGift} visible={giftOverlayVisible} />
 
       <NoticeModal
         actions={[{ label: 'Tamam', onPress: () => setFriendNoticeVisible(false), variant: 'secondary' }]}
@@ -1279,7 +1675,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
         actions={[{ label: 'Tamam', onPress: () => setLikeNoticeVisible(false), variant: 'secondary' }]}
         message={likeNoticeMessage}
         title="Beğeni gönderildi"
-        visible={likeNoticeVisible}
+        visible={!isFriendCallSession && likeNoticeVisible}
       />
 
       <NoticeModal
@@ -1304,7 +1700,7 @@ export function VoiceCallScreen({ navigation, route }: AppScreenProps<'VoiceCall
         ]}
         message={`Hakkın günlük yenilenir. Hemen devam etmek için hakkını yenileyebilir veya Plus/VIP’a geçebilirsin.\n\nYenilenmeye kalan: ${likeResetCountdown}`}
         title="Günlük beğenme hakkın bitti"
-        visible={likeLimitVisible}
+        visible={!isFriendCallSession && likeLimitVisible}
       />
 
       <NoticeModal
@@ -1700,6 +2096,9 @@ const styles = StyleSheet.create({
   bottomSection: {
     flex: 2.15,
     justifyContent: 'space-between',
+  },
+  bottomSectionFriend: {
+    justifyContent: 'flex-end',
   },
   topicCard: {
     borderRadius: radius.lg,
