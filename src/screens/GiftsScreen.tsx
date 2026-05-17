@@ -1,47 +1,19 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
+import { GiftGrid } from '../components/GiftGrid';
 import { GlassCard } from '../components/GlassCard';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { colors, radius, spacing } from '../constants/theme';
+import { colors, spacing } from '../constants/theme';
+import { giftCatalog } from '../data/giftCatalog';
 import { AppScreenProps } from '../navigation/types';
-import { GiftHistory, listGiftHistory } from '../services/socialService';
+import { GiftHistory, purchaseGiftCredit, listGiftHistory } from '../services/socialService';
 import { GiftItem } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
+import { getContentMaxWidth, getHorizontalPadding, getScreenMetrics } from '../utils/responsive';
 
 type GiftDisplay = GiftItem & { count?: number };
-
-function GiftCard({ item, onSelect }: { item: GiftDisplay; onSelect?: () => void }) {
-  return (
-    <GlassCard style={styles.giftCard}>
-      <Text style={styles.symbol}>{item.symbol}</Text>
-      <Text numberOfLines={1} style={styles.giftName}>{item.name}</Text>
-      <Text numberOfLines={2} style={styles.giftCaption}>{item.caption}</Text>
-      <Text style={styles.price}>{item.price}</Text>
-      {typeof item.count === 'number' ? <Text style={styles.count}>Adet: {item.count}</Text> : null}
-      {onSelect ? (
-        <Pressable onPress={onSelect} style={styles.selectButton}>
-          <Text style={styles.selectText}>Seç</Text>
-        </Pressable>
-      ) : null}
-    </GlassCard>
-  );
-}
-
-function GiftGrid({ data, onSelect }: { data: GiftDisplay[]; onSelect?: () => void }) {
-  if (data.length === 0) {
-    return <Text style={styles.emptySmall}>Henüz kayıt yok.</Text>;
-  }
-
-  return (
-    <View style={styles.grid}>
-      {data.map((gift) => (
-        <GiftCard key={gift.id} item={gift} onSelect={onSelect} />
-      ))}
-    </View>
-  );
-}
 
 function HistorySection({ title, data }: { title: string; data: GiftDisplay[] }) {
   return (
@@ -65,6 +37,7 @@ function HistorySection({ title, data }: { title: string; data: GiftDisplay[] })
 }
 
 export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
+  const { width } = useWindowDimensions();
   const [history, setHistory] = useState<GiftHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -77,12 +50,11 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
         return;
       }
 
-      if (result.error || !result.data) {
+      if (result.error) {
         setErrorMessage(getFriendlyErrorMessage(result.error, 'Hediye geçmişi yüklenemedi.'));
-      } else {
-        setHistory(result.data);
       }
 
+      setHistory(result.data ?? { received: [], sent: [], popular: giftCatalog, balances: {} });
       setLoading(false);
     });
 
@@ -92,7 +64,35 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
   }, []);
 
   const hasHistory = Boolean(history && history.received.length + history.sent.length > 0);
-  const selectGift = () => setNoticeMessage('Hediye paketleri yakında mağaza içi satın alma ile açılacak. Dış ödeme kullanılmaz.');
+  const catalog = history?.popular?.length ? history.popular : giftCatalog;
+  const balances = history?.balances ?? {};
+  const cardWidth = useMemo(() => {
+    const screen = getScreenMetrics({ width, height: width });
+    const contentMaxWidth = screen.isTablet ? 720 : Math.min(getContentMaxWidth(width), 430);
+    const contentWidth = Math.min(width, contentMaxWidth) - getHorizontalPadding(width) * 2;
+    const gap = width < 360 ? 8 : 12;
+    const columns = screen.isTablet ? 3 : 2;
+
+    return Math.floor((contentWidth - gap * (columns - 1)) / columns);
+  }, [width]);
+
+  async function selectGift(gift: GiftItem) {
+    setNoticeMessage('');
+    const result = await purchaseGiftCredit(gift, 1);
+
+    if (result.error || !result.data) {
+      setNoticeMessage(result.error?.message ?? 'Hediye hakkı alınamadı.');
+      return;
+    }
+
+    setHistory((current) => ({
+      received: current?.received ?? [],
+      sent: current?.sent ?? [],
+      popular: current?.popular?.length ? current.popular : giftCatalog,
+      balances: result.data ?? {},
+    }));
+    setNoticeMessage(`${gift.name} hediye hakkı eklendi.`);
+  }
 
   return (
     <PremiumScreen contentStyle={styles.content}>
@@ -100,13 +100,19 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
       {loading ? <ActivityIndicator color={colors.cyan} /> : null}
       {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Popüler hediyeler</Text>
+        <GiftGrid
+          buttonLabel={() => 'Hediye Hakkı Al'}
+          cardWidth={cardWidth}
+          data={catalog}
+          inventory={balances}
+          onSelect={selectGift}
+        />
+      </View>
+
       {history ? (
         <>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Popüler hediyeler</Text>
-            <GiftGrid data={history.popular} onSelect={selectGift} />
-          </View>
-
           {!hasHistory ? (
             <GlassCard>
               <Text style={styles.empty}>Henüz hediye geçmişin yok.</Text>
@@ -130,7 +136,6 @@ export function GiftsScreen({ navigation }: AppScreenProps<'Gifts'>) {
 const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
-    paddingBottom: 96,
   },
   section: {
     gap: spacing.sm,
@@ -138,56 +143,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: colors.text,
     fontSize: 18,
-    fontWeight: '900',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  giftCard: {
-    width: '48%',
-    minHeight: 168,
-    padding: spacing.sm,
-    borderRadius: radius.lg,
-    gap: 5,
-  },
-  symbol: {
-    fontSize: 30,
-  },
-  giftName: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  giftCaption: {
-    minHeight: 32,
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  price: {
-    color: colors.gold,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  count: {
-    color: colors.muted,
-    fontSize: 11,
-  },
-  selectButton: {
-    marginTop: 'auto',
-    minHeight: 34,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  selectText: {
-    color: colors.text,
-    fontSize: 12,
     fontWeight: '900',
   },
   historyCard: {

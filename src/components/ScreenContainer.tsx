@@ -1,29 +1,69 @@
 import { PropsWithChildren } from 'react';
-import { ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { ScrollView, StyleProp, StyleSheet, View, ViewStyle, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, gradients, spacing } from '../constants/theme';
+import { colors, gradients } from '../constants/theme';
+import { ScreenInsetMode, getScreenLayout } from '../utils/responsive';
 
 type ScreenContainerProps = PropsWithChildren<{
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  topInsetMode?: ScreenInsetMode;
+  bottomInsetMode?: ScreenInsetMode;
 }>;
 
-export function ScreenContainer({ children, scroll = true, contentStyle }: ScreenContainerProps) {
+export function ScreenContainer({
+  children,
+  scroll = true,
+  contentStyle,
+  topInsetMode = 'default',
+  bottomInsetMode = 'default',
+}: ScreenContainerProps) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const screenLayout = getScreenLayout({ width, height }, insets, { topInsetMode, bottomInsetMode });
+
   const content = scroll ? (
-    <ScrollView contentContainerStyle={[styles.scrollContent, contentStyle]} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          gap: screenLayout.pageGap,
+          paddingBottom: screenLayout.contentBottomPadding,
+          paddingHorizontal: screenLayout.horizontalPadding,
+          paddingTop: screenLayout.contentTopPadding,
+        },
+        contentStyle,
+      ]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.staticContent, contentStyle]}>{children}</View>
+    <View
+      style={[
+        styles.staticContent,
+        {
+          paddingBottom: screenLayout.contentBottomPadding,
+          paddingHorizontal: screenLayout.horizontalPadding,
+          paddingTop: screenLayout.contentTopPadding,
+        },
+        contentStyle,
+      ]}
+    >
+      {children}
+    </View>
   );
 
   return (
     <LinearGradient colors={[...gradients.background]} style={styles.container}>
       <View style={[styles.orb, styles.orbLeft]} />
       <View style={[styles.orb, styles.orbRight]} />
-      <SafeAreaView style={styles.safeArea}>{content}</SafeAreaView>
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+        <View style={[styles.centerColumn, { maxWidth: screenLayout.contentMaxWidth }]}>{content}</View>
+      </SafeAreaView>
     </LinearGradient>
   );
 }
@@ -36,17 +76,16 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  centerColumn: {
+    flex: 1,
+    width: '100%',
+    alignSelf: 'center',
+  },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 120,
-    gap: spacing.md,
+    flexGrow: 1,
   },
   staticContent: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
   },
   orb: {
     position: 'absolute',

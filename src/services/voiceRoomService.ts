@@ -1,6 +1,8 @@
-import { defaultProfile } from '../data/mockData';
+import { logSafeDebug } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { VoiceRoom, VoiceRoomJoinRequest, VoiceRoomMember, VoiceRoomPricingType, VoiceRoomStatus, VoiceRoomType } from '../types';
+import { getDeterministicAvatarId, resolveAvatarId } from '../utils/avatarResolver';
+import { resolveDisplayName } from './authService';
 
 type ServiceError = {
   message: string;
@@ -57,7 +59,7 @@ const genericError: ServiceError = {
 };
 
 function logRealtimeNotice(scope: string) {
-  console.info(`${scope}: bağlantı sessizce yenileniyor.`);
+  logSafeDebug(`${scope}: bağlantı sessizce yenileniyor`, 'realtime reconnect');
 }
 
 function normalizeRoom(row: VoiceRoomRow, members: VoiceRoomMember[], requests: VoiceRoomJoinRequest[]): VoiceRoom {
@@ -81,10 +83,13 @@ function normalizeRoom(row: VoiceRoomRow, members: VoiceRoomMember[], requests: 
 
 function profileFor(userId: string, profiles: Map<string, ProfileRow>) {
   const profile = profiles.get(userId);
+  const fallbackAvatarId = getDeterministicAvatarId(userId);
 
   return {
-    username: profile?.username?.trim() || 'Gizli Kullanıcı',
-    avatarId: profile?.avatar_id?.trim() || defaultProfile.avatarId,
+    username: resolveDisplayName({
+      username: profile?.username,
+    }),
+    avatarId: resolveAvatarId(profile?.avatar_id?.trim() || fallbackAvatarId),
   };
 }
 

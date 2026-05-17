@@ -1,24 +1,38 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { colors, radius, spacing } from '../constants/theme';
+import { colors, spacing } from '../constants/theme';
 import { giftCatalog } from '../data/giftCatalog';
 import { GiftItem } from '../types';
+import { getScreenMetrics } from '../utils/responsive';
+import { GiftGrid, GiftInventoryMap } from './GiftGrid';
 import { GlassCard } from './GlassCard';
 
 type GiftModalProps = {
+  inventory?: GiftInventoryMap;
   visible: boolean;
   onClose: () => void;
   onSelect: (gift: GiftItem) => void;
 };
 
 type GiftCelebrationOverlayProps = {
+  caption?: string;
   gift: GiftItem | null;
   visible: boolean;
 };
 
-export function GiftModal({ visible, onClose, onSelect }: GiftModalProps) {
+export function GiftModal({ inventory, visible, onClose, onSelect }: GiftModalProps) {
+  const { width } = useWindowDimensions();
+  const cardWidth = useMemo(() => {
+    const screen = getScreenMetrics({ width, height: width });
+    const modalWidth = Math.min(width - spacing.lg * 2, 720) - spacing.md * 2;
+    const gap = width < 360 ? 8 : 12;
+    const columns = screen.isTablet ? 3 : 2;
+
+    return Math.floor((modalWidth - gap * (columns - 1)) / columns);
+  }, [width]);
+
   return (
     <Modal animationType="fade" onRequestClose={onClose} statusBarTranslucent transparent visible={visible}>
       <View style={styles.backdrop}>
@@ -34,27 +48,22 @@ export function GiftModal({ visible, onClose, onSelect }: GiftModalProps) {
             </Pressable>
           </View>
 
-          <View style={styles.grid}>
-            {giftCatalog.map((gift) => (
-              <Pressable key={gift.id} onPress={() => onSelect(gift)} style={styles.gridItemWrap}>
-                <LinearGradient colors={gift.accent} style={styles.giftGlow}>
-                  <View style={styles.giftCard}>
-                    <Text style={styles.symbol}>{gift.symbol}</Text>
-                    <Text style={styles.giftName}>{gift.name}</Text>
-                    <Text style={styles.giftCaption}>{gift.caption}</Text>
-                    <Text style={styles.price}>{gift.price}</Text>
-                  </View>
-                </LinearGradient>
-              </Pressable>
-            ))}
-          </View>
+          <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false} style={styles.giftList}>
+            <GiftGrid
+              buttonLabel={(_gift, quantity) => (quantity > 0 ? 'Ücretsiz Gönder' : 'Hediye Hakkı Ekle')}
+              cardWidth={cardWidth}
+              data={giftCatalog}
+              inventory={inventory}
+              onSelect={onSelect}
+            />
+          </ScrollView>
         </GlassCard>
       </View>
     </Modal>
   );
 }
 
-export function GiftCelebrationOverlay({ gift, visible }: GiftCelebrationOverlayProps) {
+export function GiftCelebrationOverlay({ caption = 'Süreye bonus ekleniyor...', gift, visible }: GiftCelebrationOverlayProps) {
   const pulse = useRef(new Animated.Value(0.85)).current;
 
   useEffect(() => {
@@ -82,7 +91,7 @@ export function GiftCelebrationOverlay({ gift, visible }: GiftCelebrationOverlay
           <Animated.View style={[styles.overlayInner, { transform: [{ scale: pulse }] }]}>
             <Text style={styles.overlaySymbol}>{gift?.symbol ?? '🎁'}</Text>
             <Text style={styles.overlayTitle}>{gift?.name ?? 'Hediye'}</Text>
-            <Text style={styles.overlayCaption}>Süreye bonus ekleniyor...</Text>
+            <Text style={styles.overlayCaption}>{caption}</Text>
           </Animated.View>
         </LinearGradient>
       </View>
@@ -98,6 +107,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(2, 4, 14, 0.74)',
   },
   modalCard: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    maxHeight: '82%',
     gap: spacing.md,
   },
   modalHeader: {
@@ -126,47 +139,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: '700',
   },
+  giftList: {
+    flexGrow: 0,
+  },
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: spacing.sm,
-  },
-  gridItemWrap: {
-    width: '48%',
-  },
-  giftGlow: {
-    borderRadius: radius.lg,
-    padding: 1,
-  },
-  giftCard: {
-    minHeight: 146,
-    borderRadius: radius.lg - 1,
-    backgroundColor: 'rgba(10, 12, 32, 0.94)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    padding: spacing.md,
-    gap: 6,
-  },
-  symbol: {
-    fontSize: 34,
-  },
-  giftName: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  giftCaption: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    minHeight: 34,
-  },
-  price: {
-    marginTop: 'auto',
-    color: colors.goldSoft,
-    fontSize: 15,
-    fontWeight: '800',
+    paddingBottom: spacing.sm,
   },
   overlayBackdrop: {
     flex: 1,

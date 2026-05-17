@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar } from '../components/Avatar';
 import { ActionCard } from '../components/home/ActionCard';
 import { AutoCallCard } from '../components/home/AutoCallCard';
 import { BottomTabBar, BottomTabItem } from '../components/home/BottomTabBar';
@@ -15,18 +14,22 @@ import { ThemeToggle } from '../components/home/ThemeToggle';
 import { DrawerItem, FeatureItem, HomePalette } from '../components/home/types';
 import { NoticeModal } from '../components/NoticeModal';
 import { isLiveKitEnabled } from '../config/features';
-import { colors, layout, radius } from '../constants/theme';
+import { colors, radius } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
-import { signOut } from '../services/authService';
-import { joinQueue, leaveQueue, listenForMatch } from '../services/matchService';
+import { listUnreadNotifications, subscribeToNotifications } from '../services/notificationService';
+import { getCurrentUser, signOut } from '../services/authService';
+import { findMatch, joinQueue, leaveQueue, listenForMatch } from '../services/matchService';
 import { requestMicrophonePermission } from '../services/permissionsService';
+import { listFriends, listThreads, subscribeToFriendships, subscribeToThreads } from '../services/socialService';
 import { MatchRole, MatchmakingMode, UiTheme } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
+import { getScreenLayout } from '../utils/responsive';
+import { getHomeResponsiveMetrics } from '../utils/voiceCallUiState';
 
 const AUTO_CALL_SECONDS = 45;
 const MATCH_WAIT_TIMEOUT_MS = 30000;
+let autoCallDeadlineAt: number | null = null;
 
 type PendingAction =
   | { type: 'role'; role: MatchRole }
@@ -49,9 +52,10 @@ type HomeMetrics = {
   featureBlockHeight: number;
   featureCardHeight: number;
   featureOffset: number;
-  tabBarHeight: number;
-  tabBarOffset: number;
   iconButton: number;
+  veryShort: boolean;
+  contentMaxWidth: number;
+  bottomTab: ReturnType<typeof getScreenLayout>['bottomTab'];
 };
 
 const drawerItems: DrawerItem[] = [
@@ -59,14 +63,13 @@ const drawerItems: DrawerItem[] = [
   { key: 'profile', label: 'Profilim', icon: 'person' },
   { key: 'chats', label: 'Sohbetler', icon: 'chatbubbles' },
   { key: 'friends', label: 'Arkadaşlar', icon: 'people' },
-  { key: 'notifications', label: 'Ayarlar', icon: 'settings' },
   { key: 'packages', label: 'Paketler', icon: 'diamond' },
   { key: 'badges', label: 'Rozet Sistemi', icon: 'shield-half' },
   { key: 'settings', label: 'Ayarlar', icon: 'settings' },
   { key: 'logout', label: 'Çıkış Yap', icon: 'log-out' },
 ];
 
-const bottomTabs: BottomTabItem[] = [
+const baseBottomTabs: BottomTabItem[] = [
   { key: 'home', label: 'Ana Sayfa', icon: 'home' },
   { key: 'chats', label: 'Sohbetler', icon: 'chatbox-ellipses' },
   { key: 'gifts', label: 'Hediyeler', icon: 'gift' },
@@ -76,6 +79,22 @@ const bottomTabs: BottomTabItem[] = [
 
 function formatAutoCall(seconds: number) {
   return `00:${String(seconds).padStart(2, '0')}`;
+}
+
+function getAutoCallRemainingSeconds() {
+  if (!autoCallDeadlineAt) {
+    return AUTO_CALL_SECONDS;
+  }
+
+  return Math.max(0, Math.ceil((autoCallDeadlineAt - Date.now()) / 1000));
+}
+
+function startAutoCallDeadline() {
+  autoCallDeadlineAt = Date.now() + AUTO_CALL_SECONDS * 1000;
+}
+
+function clearAutoCallDeadline() {
+  autoCallDeadlineAt = null;
 }
 
 function getMatchmakingMode(role: MatchRole): MatchmakingMode {
@@ -194,25 +213,30 @@ function getFeatureItems(): FeatureItem[] {
 }
 
 function getMetrics(width: number, height: number, insetsTop: number, insetsBottom: number): HomeMetrics {
-  const compact = width < 380;
-  const short = height < 760;
-  const sidePadding = compact ? 14 : 18;
-  const topPadding = compact ? 6 : 8;
-  const gap = short ? 8 : 10;
-  const ctaGap = 10;
-  const tabBarHeight = 76;
-  const tabBarOffset = 4;
-  const contentPaddingBottom = tabBarHeight + tabBarOffset + 12;
-  const available = height - insetsTop - topPadding - contentPaddingBottom - gap * 4;
-  const topHeight = Math.round(Math.min(60, Math.max(48, available * 0.076)));
-  const profileHeight = Math.round(Math.min(132, Math.max(110, available * 0.154)));
-  const ctaCardHeightBase = Math.round(Math.min(220, Math.max(176, available * 0.215)));
-  const ctaCardHeight = Math.max(88, Math.min(96, Math.round(ctaCardHeightBase * 0.82)));
+  const screen = getScreenLayout(
+    { width, height },
+    { top: insetsTop, bottom: insetsBottom, left: 0, right: 0 },
+    { bottomInsetMode: 'bottom-tab' },
+  );
+  const responsive = getHomeResponsiveMetrics({ width, height });
+  const compact = responsive.compact;
+  const short = responsive.short;
+  const sidePadding = screen.horizontalPadding;
+  const topPadding = screen.contentTopPadding;
+  const gap = responsive.gap;
+  const ctaGap = responsive.ctaGap;
+  const contentPaddingBottom = screen.contentBottomPadding;
+  const available = height - topPadding - contentPaddingBottom - gap * 4;
+  const topHeight = Math.round(Math.min(responsive.veryShort ? 46 : 60, Math.max(responsive.veryShort ? 40 : 48, available * 0.07)));
+  const profileHeight = Math.round(Math.min(responsive.veryShort ? 104 : 132, Math.max(responsive.veryShort ? 92 : 110, available * 0.145)));
+  const ctaCardHeightBase = Math.round(Math.min(220, Math.max(responsive.veryShort ? 96 : 176, available * 0.215)));
+  const ctaCardHeight = Math.max(responsive.ctaCardMinHeight, Math.min(responsive.ctaCardMaxHeight, Math.round(ctaCardHeightBase * 0.82)));
   const ctaBlockHeight = ctaCardHeight * 2 + ctaGap;
-  const autoHeight = Math.round(Math.min(84, Math.max(70, available * 0.094)));
-  const featureOffset = compact ? 4 : 6;
-  const featureBlockHeight = Math.max(192, available - topHeight - profileHeight - ctaBlockHeight - autoHeight - featureOffset);
-  const featureCardHeight = Math.max(compact ? 58 : 62, Math.floor((featureBlockHeight - gap * 2) / 3));
+  const autoHeight = Math.round(Math.min(responsive.autoMaxHeight, Math.max(responsive.autoMinHeight, available * 0.086)));
+  const featureOffset = responsive.featureOffset;
+  const featureBlockHeight = Math.max(responsive.featureBlockMinHeight, available - topHeight - profileHeight - ctaBlockHeight - autoHeight - featureOffset);
+  const featureCardHeight = Math.max(responsive.featureCardMinHeight, Math.floor((featureBlockHeight - gap * 2) / 3));
+  const contentMaxWidth = screen.contentMaxWidth;
 
   return {
     compact,
@@ -230,9 +254,10 @@ function getMetrics(width: number, height: number, insetsTop: number, insetsBott
     featureBlockHeight,
     featureCardHeight,
     featureOffset,
-    tabBarHeight,
-    tabBarOffset,
-    iconButton: compact ? 42 : 48,
+    iconButton: responsive.iconButton,
+    contentMaxWidth,
+    bottomTab: screen.bottomTab,
+    veryShort: responsive.veryShort,
   };
 }
 
@@ -247,13 +272,12 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     userLevel,
   } = useAppState();
   const palette = useMemo(() => getPalette(uiTheme), [uiTheme]);
-  const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
   const featureItems = useMemo(() => getFeatureItems(), []);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const metrics = useMemo(() => getMetrics(width, height, insets.top, insets.bottom), [height, insets.bottom, insets.top, width]);
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [autoCallCountdown, setAutoCallCountdown] = useState(AUTO_CALL_SECONDS);
+  const [autoCallCountdown, setAutoCallCountdown] = useState(getAutoCallRemainingSeconds);
   const [permissionModalVisible, setPermissionModalVisible] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
@@ -263,12 +287,36 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   const [matchErrorMessage, setMatchErrorMessage] = useState('Eşleşme şu anda başlatılamadı.');
   const [matchWaitingVisible, setMatchWaitingVisible] = useState(false);
   const [isJoiningQueue, setIsJoiningQueue] = useState(false);
+  const [pendingFriendRequestCount, setPendingFriendRequestCount] = useState(0);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const fadeValue = useRef(new Animated.Value(0)).current;
   const matchmakingRequestRef = useRef(0);
   const matchmakingPhaseRef = useRef<'idle' | 'waiting' | 'matched'>('idle');
   const isJoiningQueueRef = useRef(false);
   const matchListenerCleanupRef = useRef<null | (() => Promise<void>)>(null);
   const matchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bottomTabs = useMemo(
+    () =>
+      baseBottomTabs.map((item) => {
+        if (item.key === 'friends') {
+          return { ...item, badgeCount: pendingFriendRequestCount };
+        }
+
+        if (item.key === 'chats') {
+          return { ...item, badgeCount: unreadChatCount };
+        }
+
+        if (item.key === 'notifications') {
+          return { ...item, badgeCount: unreadNotificationCount };
+        }
+
+        return item;
+      }),
+    [pendingFriendRequestCount, unreadChatCount, unreadNotificationCount],
+  );
 
   useEffect(() => {
     Animated.timing(fadeValue, {
@@ -279,18 +327,103 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   }, [fadeValue]);
 
   useEffect(() => {
-    if (!profile.autoCallEnabled) {
-      return;
+    let mounted = true;
+
+    async function resolveCurrentUser() {
+      const userResult = await getCurrentUser();
+
+      if (!mounted) {
+        return;
+      }
+
+      setCurrentUserId(userResult.data?.id ?? null);
     }
 
-    if (autoCallCountdown <= 0) {
-      void openVoiceRole('derdim-var');
+    void resolveCurrentUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      return undefined;
+    }
+
+    let mounted = true;
+
+    async function refreshBadges() {
+      const [friendResult, threadResult, notificationResult] = await Promise.all([
+        listFriends(),
+        listThreads(),
+        listUnreadNotifications(currentUserId ?? undefined),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      setPendingFriendRequestCount(friendResult.data?.incomingRequests.length ?? 0);
+      setUnreadChatCount((threadResult.data ?? []).reduce((total, thread) => total + thread.unreadCount, 0));
+      setUnreadNotificationCount(notificationResult.data?.length ?? 0);
+    }
+
+    void refreshBadges();
+    const friendChannel = subscribeToFriendships(() => {
+      void refreshBadges();
+    }, currentUserId);
+    const threadChannel = subscribeToThreads(() => {
+      void refreshBadges();
+    }, currentUserId);
+    const notificationChannel = subscribeToNotifications(currentUserId, () => {
+      void refreshBadges();
+    });
+    const refreshInterval = setInterval(() => {
+      void refreshBadges();
+    }, 45000);
+
+    return () => {
+      mounted = false;
+      clearInterval(refreshInterval);
+
+      if (friendChannel) {
+        void friendChannel.unsubscribe();
+      }
+
+      if (threadChannel) {
+        void threadChannel.unsubscribe();
+      }
+
+      if (notificationChannel) {
+        void notificationChannel.unsubscribe();
+      }
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!profile.autoCallEnabled) {
+      clearAutoCallDeadline();
       setAutoCallCountdown(AUTO_CALL_SECONDS);
       return;
     }
 
+    if (!autoCallDeadlineAt) {
+      startAutoCallDeadline();
+      setAutoCallCountdown(getAutoCallRemainingSeconds());
+    }
+
+    const remainingSeconds = getAutoCallRemainingSeconds();
+
+    if (remainingSeconds <= 0) {
+      void openVoiceRole('derdim-var');
+      startAutoCallDeadline();
+      setAutoCallCountdown(getAutoCallRemainingSeconds());
+      return;
+    }
+
     const timerId = setTimeout(() => {
-      setAutoCallCountdown((current) => current - 1);
+      setAutoCallCountdown(getAutoCallRemainingSeconds());
     }, 1000);
 
     return () => clearTimeout(timerId);
@@ -298,13 +431,22 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
 
   useEffect(() => {
     if (profile.autoCallEnabled) {
-      setAutoCallCountdown(AUTO_CALL_SECONDS);
+      if (!autoCallDeadlineAt) {
+        startAutoCallDeadline();
+      }
+
+      setAutoCallCountdown(getAutoCallRemainingSeconds());
+      return;
     }
+
+    clearAutoCallDeadline();
+    setAutoCallCountdown(AUTO_CALL_SECONDS);
   }, [profile.autoCallEnabled]);
 
   function resetAutoCall() {
     if (profile.autoCallEnabled) {
-      setAutoCallCountdown(AUTO_CALL_SECONDS);
+      startAutoCallDeadline();
+      setAutoCallCountdown(getAutoCallRemainingSeconds());
     }
   }
 
@@ -315,10 +457,18 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
   }
 
+  function clearMatchPoll() {
+    if (matchPollRef.current) {
+      clearInterval(matchPollRef.current);
+      matchPollRef.current = null;
+    }
+  }
+
   async function stopMatchmaking() {
     matchmakingRequestRef.current += 1;
     matchmakingPhaseRef.current = 'idle';
     clearMatchTimeout();
+    clearMatchPoll();
     setMatchWaitingVisible(false);
 
     const cleanup = matchListenerCleanupRef.current;
@@ -341,13 +491,25 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     setMatchErrorVisible(true);
   }
 
-  function openMatchedVoiceCall() {
+  function openMatchedVoiceCall(state?: Awaited<ReturnType<typeof findMatch>>['data']) {
     matchmakingPhaseRef.current = 'matched';
     clearMatchTimeout();
+    clearMatchPoll();
     setMatchWaitingVisible(false);
+    const partner = state?.partnerProfile;
+
     navigation.reset({
       index: 0,
-      routes: [{ name: 'VoiceCall', params: { matchReady: true } }],
+      routes: [{
+        name: 'VoiceCall',
+        params: {
+          matchReady: true,
+          matchedUserId: partner?.userId,
+          partnerName: partner?.username,
+          partnerAvatarId: partner?.avatarId,
+          matchRoomId: state?.queue.match_room_id ?? state?.queue.room_id ?? undefined,
+        },
+      }],
     });
   }
 
@@ -371,7 +533,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     }
 
     if (joinResult.data.queue.status === 'matched') {
-      openMatchedVoiceCall();
+      openMatchedVoiceCall(joinResult.data);
       return;
     }
 
@@ -385,13 +547,26 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       showMatchError('Şu anda uygun kullanıcı bulunamadı. Biraz sonra tekrar deneyebilirsin.');
     }, MATCH_WAIT_TIMEOUT_MS);
 
-    const listenResult = await listenForMatch(() => {
+    clearMatchPoll();
+    matchPollRef.current = setInterval(async () => {
+      if (matchmakingRequestRef.current !== requestId || matchmakingPhaseRef.current !== 'waiting') {
+        return;
+      }
+
+      const pollResult = await findMatch();
+
+      if (pollResult.data?.queue.status === 'matched') {
+        openMatchedVoiceCall(pollResult.data);
+      }
+    }, 1500);
+
+    const listenResult = await listenForMatch((state) => {
       if (matchmakingRequestRef.current !== requestId) {
         return;
       }
 
       matchListenerCleanupRef.current = null;
-      openMatchedVoiceCall();
+      openMatchedVoiceCall(state);
     });
 
     if (matchmakingRequestRef.current !== requestId) {
@@ -442,7 +617,6 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   }
 
   async function openVoiceFeature(route: 'NightMode' | 'SilentScream') {
-    resetAutoCall();
     setPendingAction({ type: 'route', route });
 
     if (route === 'NightMode' && isLiveKitEnabled) {
@@ -467,7 +641,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
     const result = await signOut();
 
     if (result.error) {
-      console.error('[auth] signOut failed:', result.error.message);
+      console.warn('[auth] signOut failed:', result.error.message);
     }
 
     navigation.reset({
@@ -477,7 +651,6 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
   }
 
   function handleFeaturePress(item: FeatureItem) {
-    resetAutoCall();
     if (matchmakingPhaseRef.current === 'waiting') {
       void stopMatchmaking();
     }
@@ -508,7 +681,6 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
 
   function handleDrawerSelect(item: DrawerItem) {
     setDrawerVisible(false);
-    resetAutoCall();
     if (matchmakingPhaseRef.current === 'waiting') {
       void stopMatchmaking();
     }
@@ -547,7 +719,6 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
 
   function handleBottomTabSelect(item: BottomTabItem) {
     setActiveTab(item.key);
-    resetAutoCall();
     if (matchmakingPhaseRef.current === 'waiting') {
       void stopMatchmaking();
     }
@@ -618,31 +789,40 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
       <View pointerEvents="none" style={[styles.orb, styles.orbRight, { backgroundColor: palette.orbSecondary }]} />
       <View pointerEvents="none" style={[styles.orb, styles.orbBottom, { backgroundColor: palette.orbPrimary }]} />
 
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <Animated.View
-          style={[
-            styles.page,
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
             {
+              paddingBottom: metrics.contentPaddingBottom,
               paddingHorizontal: metrics.sidePadding,
               paddingTop: metrics.topPadding,
-              paddingBottom: metrics.contentPaddingBottom,
-              gap: metrics.gap,
-              opacity: fadeValue,
-              transform: [
-                {
-                  translateY: fadeValue.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [18, 0],
-                  }),
-                },
-              ],
             },
           ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View
+            style={[
+              styles.page,
+              {
+                gap: metrics.gap,
+                maxWidth: metrics.contentMaxWidth,
+                minHeight: height - metrics.topPadding - metrics.contentPaddingBottom,
+                opacity: fadeValue,
+                transform: [
+                  {
+                    translateY: fadeValue.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [18, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
         >
           <View style={[styles.topBar, { height: metrics.topHeight }]}>
             <Pressable
               onPress={() => {
-                resetAutoCall();
                 setDrawerVisible(true);
               }}
               style={[
@@ -663,7 +843,15 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           </View>
 
           <View style={{ height: metrics.profileHeight }}>
-            <ProfileCard avatar={avatar} compact={metrics.compact} data={profileData} onPress={() => navigation.navigate('Profile')} palette={palette} />
+            <ProfileCard
+              avatarId={profile.avatarId}
+              compact={metrics.compact}
+              currentUserId={currentUserId}
+              data={profileData}
+              fallbackGender={profile.gender}
+              onPress={() => navigation.navigate('Profile')}
+              palette={palette}
+            />
           </View>
 
           <View style={{ height: metrics.ctaBlockHeight, gap: metrics.ctaGap }}>
@@ -674,6 +862,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
               gradient={['#FF4A7A', '#FF3FA7', '#9426C8']}
               height={metrics.ctaCardHeight}
               icon="heart"
+              dense={metrics.veryShort}
               disabled={isJoiningQueue}
               onPress={() => void openVoiceRole('derdim-var')}
               palette={palette}
@@ -688,6 +877,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
               gradient={['#8A3CFF', '#5D34FF', '#245CFF']}
               height={metrics.ctaCardHeight}
               icon="headset"
+              dense={metrics.veryShort}
               disabled={isJoiningQueue}
               onPress={() => void openVoiceRole('derman-olan')}
               palette={palette}
@@ -700,6 +890,7 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           <View style={{ height: metrics.autoHeight, marginTop: 2 }}>
             <AutoCallCard
               compact
+              dense={metrics.veryShort}
               counterLabel={profile.autoCallEnabled ? formatAutoCall(autoCallCountdown) : 'Kapalı'}
               enabled={profile.autoCallEnabled}
               onToggle={() => {
@@ -711,9 +902,10 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
           </View>
 
           <View style={{ height: metrics.featureBlockHeight, marginTop: metrics.featureOffset }}>
-            <FeatureGrid cardHeight={metrics.featureCardHeight} compact items={featureItems} onSelect={handleFeaturePress} palette={palette} />
+            <FeatureGrid cardHeight={metrics.featureCardHeight} compact dense={metrics.veryShort} items={featureItems} onSelect={handleFeaturePress} palette={palette} />
           </View>
-        </Animated.View>
+          </Animated.View>
+        </ScrollView>
       </SafeAreaView>
 
       <View
@@ -721,14 +913,21 @@ export function HomeScreen({ navigation }: AppScreenProps<'Home'>) {
         style={[
           styles.bottomTabBar,
           {
-            bottom: 4,
+            bottom: 0,
+            height: metrics.bottomTab.containerHeight,
+            paddingBottom: metrics.bottomTab.bottomInset,
+            paddingHorizontal: metrics.bottomTab.sideMargin,
           },
         ]}>
-        <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
+        <View style={[styles.bottomTabInner, { height: metrics.bottomTab.barHeight, maxWidth: metrics.bottomTab.maxWidth }]}>
+          <BottomTabBar activeKey={activeTab} compact={metrics.compact} items={bottomTabs} onSelect={handleBottomTabSelect} palette={palette} />
+        </View>
       </View>
 
       <DrawerMenu
-        avatar={avatar}
+        avatarId={profile.avatarId}
+        currentUserId={currentUserId}
+        fallbackGender={profile.gender}
         items={drawerItems}
         onClose={() => setDrawerVisible(false)}
         onSelect={handleDrawerSelect}
@@ -784,10 +983,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   page: {
-    flex: 1,
     width: '100%',
-    maxWidth: layout.maxWidth,
     alignSelf: 'center',
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   orb: {
     position: 'absolute',
@@ -826,12 +1026,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   bottomTabBar: {
+    alignItems: 'center',
+    left: 0,
     position: 'absolute',
-    left: 24,
-    right: 24,
-    height: 76,
-    borderRadius: 28,
     justifyContent: 'flex-end',
+    right: 0,
     zIndex: 100,
+  },
+  bottomTabInner: {
+    width: '100%',
   },
 });

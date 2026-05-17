@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { isLiveKitEnabled } from './src/config/features';
@@ -76,12 +77,14 @@ export default function App() {
   try {
     return (
       <RootErrorBoundary>
-        <SafeAreaProvider>
-          <AppProvider>
-            <StatusBar style="light" />
-            <AppNavigator />
-          </AppProvider>
-        </SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaProvider>
+            <AppProvider>
+              <StatusBar style="light" />
+              <AppNavigator />
+            </AppProvider>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
       </RootErrorBoundary>
     );
   } catch (error) {

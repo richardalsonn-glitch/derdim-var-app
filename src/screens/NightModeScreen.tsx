@@ -1,14 +1,14 @@
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ImageBackground, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar } from '../components/Avatar';
 import { NoticeModal } from '../components/NoticeModal';
+import { UserAvatar } from '../components/UserAvatar';
 import { isDemoMode } from '../config/features';
-import { colors, layout, radius, spacing } from '../constants/theme';
-import { getAvatarById } from '../data/mockData';
+import { colors, radius } from '../constants/theme';
 import { AppScreenProps } from '../navigation/types';
 import {
   fetchNightVoiceRooms,
@@ -19,12 +19,32 @@ import {
 } from '../services/voiceRoomService';
 import { VoiceRoom } from '../types';
 import { isNightModeOpen, NIGHT_MODE_CLOSED_MESSAGE } from '../utils/nightMode';
+import { getScreenLayout } from '../utils/responsive';
 
 const nightRoomBackground = require('../../assets/images/night-room-background.png');
 
 type ModalState = {
   title: string;
   message: string;
+};
+
+type RoomType = 'free' | 'paid';
+
+type Scale = {
+  tiny: boolean;
+  compact: boolean;
+  pad: number;
+  gap: number;
+  headerTitle: number;
+  cardHeight: number;
+  cardPad: number;
+  sceneHeight: number;
+  tableSize: number;
+  seatSize: number;
+  sideSeatSize: number;
+  avatarSize: number;
+  buttonHeight: number;
+  ctaHeight: number;
 };
 
 function formatShortTime(room: VoiceRoom, nowMs: number) {
@@ -50,6 +70,16 @@ function getRoomStateText(room: VoiceRoom) {
   return room.status === 'active' ? 'Aktif' : 'Açık';
 }
 
+function getRoomDisplayName(room: VoiceRoom) {
+  const name = room.name?.trim();
+
+  if (!name || name === 'Şu anda bu oda müsaittir' || name === 'Şu anda müsait') {
+    return 'Oda Müsait';
+  }
+
+  return name;
+}
+
 function getFreeSeat(room: VoiceRoom) {
   for (let seatIndex = 0; seatIndex < room.capacity; seatIndex += 1) {
     if (!room.members.some((member) => member.seatIndex === seatIndex)) {
@@ -65,7 +95,7 @@ function NightBackground({ children }: { children: ReactNode }) {
     <ImageBackground resizeMode="cover" source={nightRoomBackground} style={styles.container}>
       <View pointerEvents="none" style={styles.backgroundDim} />
       <LinearGradient
-        colors={['rgba(5,6,20,0.2)', 'rgba(5,6,20,0.35)', 'rgba(5,6,20,0.54)']}
+        colors={['rgba(3,5,18,0.15)', 'rgba(4,5,20,0.34)', 'rgba(4,5,18,0.62)']}
         pointerEvents="none"
         style={StyleSheet.absoluteFill}
       />
@@ -76,28 +106,42 @@ function NightBackground({ children }: { children: ReactNode }) {
 
 export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const { height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const screenLayout = getScreenLayout({ width, height }, insets);
   const [rooms, setRooms] = useState<VoiceRoom[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [selectedRoomType, setSelectedRoomType] = useState<'free' | 'paid'>('free');
+  const [selectedRoomType, setSelectedRoomType] = useState<RoomType>('free');
   const nightOpen = isDemoMode || isNightModeOpen();
-  const tiny = height < 720;
-  const compact = height < 800;
-  const horizontalPadding = width < 380 ? 12 : 16;
-  const contentGap = tiny ? 3 : compact ? 4 : 5;
-  const heroHeight = tiny ? 54 : compact ? 60 : 66;
-  const heroIconSize = tiny ? 30 : compact ? 34 : 38;
-  const cardHeight = tiny ? 202 : compact ? 216 : 234;
-  const miniSceneHeight = tiny ? 96 : compact ? 102 : 110;
-  const miniTableSize = tiny ? 28 : compact ? 30 : 32;
-  const miniSeatWidth = tiny ? 38 : 40;
-  const miniSeatHeight = tiny ? 30 : 32;
-  const miniSeatSideTop = (miniSceneHeight - miniSeatHeight) / 2;
-  const miniSeatInset = tiny ? -1 : -2;
-  const miniAvatarSize = tiny ? 18 : 20;
+
+  const scale: Scale = useMemo(() => {
+    const usableHeight = height - screenLayout.contentTopPadding - screenLayout.contentBottomPadding;
+    const tiny = usableHeight < 680;
+    const screen = screenLayout;
+    const compact = screen.isCompactPhone || height <= 844;
+    const reserved = tiny ? 302 : compact ? 322 : 344;
+    const cardHeight = Math.max(178, Math.min(tiny ? 196 : compact ? 232 : 268, Math.floor((usableHeight - reserved) / 2)));
+
+    return {
+      tiny,
+      compact,
+      pad: screenLayout.horizontalPadding,
+      gap: tiny ? 4 : compact ? 5 : 6,
+      headerTitle: tiny ? 28 : compact ? 33 : 38,
+      cardHeight,
+      cardPad: tiny ? 8 : compact ? 9 : 10,
+      sceneHeight: Math.max(tiny ? 70 : compact ? 90 : 100, Math.min(tiny ? 84 : compact ? 110 : 128, cardHeight - (tiny ? 106 : 140))),
+      tableSize: tiny ? 34 : compact ? 40 : 46,
+      seatSize: tiny ? 36 : compact ? 40 : 44,
+      sideSeatSize: tiny ? 36 : compact ? 40 : 42,
+      avatarSize: tiny ? 23 : compact ? 26 : 29,
+      buttonHeight: tiny ? 28 : compact ? 31 : 33,
+      ctaHeight: tiny ? 54 : compact ? 60 : 64,
+    };
+  }, [height, screenLayout, width]);
 
   const loadRooms = useCallback(async (silent = false) => {
     if (!silent) {
@@ -122,6 +166,12 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     void loadRooms();
   }, [loadRooms]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void loadRooms(true);
+    }, [loadRooms]),
+  );
+
   useEffect(() => subscribeToNightVoiceRoomsLobby(() => void loadRooms(true)), [loadRooms]);
 
   useEffect(() => {
@@ -142,7 +192,8 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
   const visibleRooms = selectedRoomType === 'free' ? freeRooms : paidRooms;
   const selectedIsPaid = selectedRoomType === 'paid';
   const selectedSectionTitle = selectedIsPaid ? 'Ücretli Odalar' : 'Ücretsiz Odalar';
-  const selectedSectionHint = selectedIsPaid ? 'Sahipli oda' : '4 kişi dolunca başlar';
+  const selectedSectionHint = selectedIsPaid ? 'Sahipli oda, istekle katılım' : '4 kişi dolunca konuşma başlar';
+  const roomCardWidth = (Math.min(width, screenLayout.contentMaxWidth) - scale.pad * 2 - scale.gap) / 2;
 
   async function handleRoomPress(room: VoiceRoom) {
     const isMember = room.members.some((member) => member.userId === currentUserId);
@@ -206,11 +257,17 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 
   function renderMiniSeat(room: VoiceRoom, seatIndex: number, isPaid: boolean) {
     const member = room.members.find((item) => item.seatIndex === seatIndex);
+    const isCurrentUser = Boolean(member?.userId && member.userId === currentUserId);
+    const username = isCurrentUser ? 'Sen' : member?.username?.trim() || '';
+    const topSeatSize = scale.seatSize;
+    const sideSeatSize = scale.sideSeatSize;
+    const sideTop = (scale.sceneHeight - sideSeatSize) / 2;
+    const horizontalInset = scale.tiny ? 2 : 4;
     const seatPositionStyle = [
-      { left: '50%' as const, marginLeft: -miniSeatWidth / 2, top: 0 },
-      { right: miniSeatInset, top: miniSeatSideTop },
-      { bottom: 0, left: '50%' as const, marginLeft: -miniSeatWidth / 2 },
-      { left: miniSeatInset, top: miniSeatSideTop },
+      { left: '50%' as const, marginLeft: -topSeatSize / 2, top: 0, height: topSeatSize, width: topSeatSize },
+      { right: horizontalInset, top: sideTop, height: sideSeatSize, width: sideSeatSize },
+      { bottom: 0, left: '50%' as const, marginLeft: -topSeatSize / 2, height: topSeatSize, width: topSeatSize },
+      { left: horizontalInset, top: sideTop, height: sideSeatSize, width: sideSeatSize },
     ][seatIndex];
 
     return (
@@ -218,7 +275,7 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
         key={seatIndex}
         style={[
           styles.miniSeat,
-          { borderRadius: miniSeatHeight / 2, height: miniSeatHeight, width: miniSeatWidth },
+          { borderRadius: Math.max(topSeatSize, sideSeatSize) / 2 },
           isPaid && styles.paidMiniSeat,
           seatPositionStyle,
           member && styles.filledMiniSeat,
@@ -226,9 +283,22 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
         ]}
       >
         {member ? (
-          <Avatar avatar={getAvatarById(member.avatarId)} size={miniAvatarSize} />
+          <>
+            <UserAvatar
+              avatarId={member.avatarId}
+              avatarSourceType="peer-profile"
+              currentUserId={currentUserId}
+              renderedUserId={member?.userId ?? null}
+              screen="night-mode"
+              size={scale.avatarSize}
+              username={username || undefined}
+            />
+            <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.filledSeatName, { fontSize: scale.tiny ? 7 : 8 }]}>
+              {username}
+            </Text>
+          </>
         ) : (
-          <Text style={styles.emptyMiniSeatText}>Boş</Text>
+          <Text style={[styles.emptyMiniSeatText, { fontSize: scale.tiny ? 9 : 10 }]}>Boş</Text>
         )}
       </View>
     );
@@ -242,109 +312,158 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
     const buttonTitle = isMember ? 'Gir' : isFull ? 'Dolu' : hasPendingRequest ? 'Bekliyor' : 'Otur';
 
     return (
-      <Pressable
-        key={room.id}
-        disabled={busyRoomId === room.id || hasPendingRequest || (isFull && !isMember)}
-        onPress={() => void handleRoomPress(room)}
-        style={styles.roomPressable}
-      >
+      <View key={room.id} style={[styles.roomPressable, { width: roomCardWidth }]}>
         <LinearGradient
-          colors={isPaid ? ['rgba(244,180,94,0.2)', 'rgba(153,70,255,0.1)', 'rgba(8,10,32,0.78)'] : ['rgba(69,224,255,0.14)', 'rgba(153,70,255,0.12)', 'rgba(8,10,32,0.78)']}
-          style={[styles.roomCard, { height: cardHeight }, isPaid ? styles.paidRoomCard : styles.freeRoomCard, isFull && styles.fullRoomCard]}
+          colors={
+            isPaid
+              ? ['rgba(244,180,94,0.19)', 'rgba(255,79,185,0.13)', 'rgba(7,12,38,0.88)']
+              : ['rgba(42,166,255,0.22)', 'rgba(88,54,214,0.13)', 'rgba(7,12,38,0.9)']
+          }
+          style={[
+            styles.roomCard,
+            {
+              height: scale.cardHeight,
+              padding: scale.cardPad,
+            },
+            isPaid ? styles.paidRoomCard : styles.freeRoomCard,
+            isFull && styles.fullRoomCard,
+          ]}
         >
-          <View pointerEvents="none" style={[styles.cardSheen, isPaid && styles.paidCardSheen]} />
+          <View pointerEvents="none" style={[styles.starDust, isPaid && styles.paidStarDust]} />
           <View pointerEvents="none" style={[styles.cardAccent, isPaid ? styles.paidCardAccent : styles.freeCardAccent]} />
+
           <View style={styles.roomCardHeader}>
-            <Text numberOfLines={1} style={styles.roomName}>{room.name || 'Şu anda bu oda müsaittir'}</Text>
-            <Text style={styles.roomCount}>{room.currentCount}/{room.capacity}</Text>
-          </View>
-          <View style={styles.tagRow}>
-            <Text style={[styles.roomTag, isPaid && styles.paidTag]}>{isPaid ? 'Ücretli' : 'Ücretsiz'}</Text>
-            <Text style={[styles.roomTag, isFull && styles.fullTag]}>{getRoomStateText(room)}</Text>
+            <Text numberOfLines={1} style={[styles.roomName, { fontSize: scale.tiny ? 12 : scale.compact ? 13 : 14 }]}>
+              {getRoomDisplayName(room)}
+            </Text>
+            <Text style={[styles.roomCount, { fontSize: scale.tiny ? 16 : 18 }]}>{room.currentCount}/{room.capacity}</Text>
           </View>
 
-          <View style={[styles.miniRoomScene, { height: miniSceneHeight }]}>
-            <View style={[styles.miniTable, { borderRadius: miniTableSize / 2, height: miniTableSize, width: miniTableSize }, isPaid && styles.paidMiniTable]}>
-              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={tiny ? 14 : 16} />
+          <View style={[styles.tagRow, { marginTop: scale.tiny ? 4 : 6 }]}>
+            <Text style={[styles.roomTag, isPaid && styles.paidTag]}>{isPaid ? 'Ücretli' : 'Ücretsiz'}</Text>
+            <Text style={[styles.roomTag, isPaid && styles.paidTag, isFull && styles.fullTag]}>{getRoomStateText(room)}</Text>
+          </View>
+
+          <View style={[styles.miniRoomScene, { height: scale.sceneHeight, marginTop: scale.tiny ? 4 : 6 }]}>
+            <View pointerEvents="none" style={[styles.orbit, isPaid && styles.paidOrbit]} />
+            <View
+              style={[
+                styles.miniTable,
+                {
+                  borderRadius: scale.tableSize / 2,
+                  height: scale.tableSize,
+                  width: scale.tableSize,
+                },
+                isPaid && styles.paidMiniTable,
+              ]}
+            >
+              <Ionicons color={isPaid ? colors.goldSoft : colors.cyan} name="moon" size={scale.tiny ? 20 : scale.compact ? 23 : 25} />
             </View>
             {Array.from({ length: room.capacity }).map((_, index) => renderMiniSeat(room, index, isPaid))}
           </View>
 
-          <View style={styles.roomCardFooter}>
+          <View style={[styles.roomCardFooter, { marginTop: scale.tiny ? 3 : 4 }]}>
             <View style={styles.timePill}>
-              <Ionicons color={colors.muted} name="time" size={12} />
-              <Text style={styles.timeText}>{formatShortTime(room, nowMs)}</Text>
+              <Ionicons color="#BFC4F6" name="time-outline" size={scale.tiny ? 12 : 14} />
+              <Text style={[styles.timeText, { fontSize: scale.tiny ? 10 : 12 }]}>{formatShortTime(room, nowMs)}</Text>
             </View>
-            {isPaid ? <Text style={styles.priceText}>79,99 TL / oda</Text> : null}
+            {isPaid ? <Text style={[styles.priceText, { fontSize: scale.tiny ? 9 : 10 }]}>79,99 TL / oda</Text> : null}
           </View>
 
-          <View style={[styles.inlineButton, isPaid && styles.paidInlineButton, (isFull && !isMember) && styles.disabledInlineButton]}>
-            {busyRoomId === room.id ? <ActivityIndicator color={colors.text} size="small" /> : <Text style={styles.inlineButtonText}>{buttonTitle}</Text>}
-          </View>
+          <Pressable
+            disabled={busyRoomId === room.id || hasPendingRequest || (isFull && !isMember)}
+            onPress={() => void handleRoomPress(room)}
+          >
+            <LinearGradient
+              colors={isPaid ? ['rgba(255,209,128,0.32)', 'rgba(96,48,126,0.5)'] : ['rgba(56,170,255,0.38)', 'rgba(28,72,165,0.56)']}
+              style={[
+                styles.inlineButton,
+                {
+                  height: scale.buttonHeight,
+                  marginTop: scale.tiny ? 4 : 6,
+                },
+                isPaid && styles.paidInlineButton,
+                (isFull && !isMember) && styles.disabledInlineButton,
+              ]}
+            >
+              {busyRoomId === room.id ? <ActivityIndicator color={colors.text} size="small" /> : <Text style={styles.inlineButtonText}>{buttonTitle}</Text>}
+            </LinearGradient>
+          </Pressable>
         </LinearGradient>
-      </Pressable>
-    );
-  }
-
-  function renderSection(title: string, subtitle: string, sectionRooms: VoiceRoom[], kind: 'free' | 'paid') {
-    const paid = kind === 'paid';
-
-    return (
-      <LinearGradient
-        colors={paid ? ['rgba(244,180,94,0.13)', 'rgba(255,79,185,0.08)', 'rgba(8,10,32,0.42)'] : ['rgba(69,224,255,0.12)', 'rgba(81,93,255,0.08)', 'rgba(8,10,32,0.42)']}
-        style={[styles.section, paid ? styles.paidSection : styles.freeSection]}
-      >
-        <View pointerEvents="none" style={[styles.sectionGlow, paid ? styles.paidSectionGlow : styles.freeSectionGlow]} />
-        <View style={styles.sectionMetaRow}>
-          <View style={styles.sectionTitleWrap}>
-            <View style={[styles.sectionIcon, paid ? styles.paidSectionIcon : styles.freeSectionIcon]}>
-              <Ionicons color={paid ? colors.goldSoft : colors.cyan} name={paid ? 'sparkles' : 'moon'} size={13} />
-            </View>
-            <Text style={styles.sectionTitle}>{title}</Text>
-          </View>
-          <Text style={styles.sectionHint}>{subtitle}</Text>
-        </View>
-        <View style={styles.roomGrid}>{sectionRooms.map(renderRoomCard)}</View>
-      </LinearGradient>
+      </View>
     );
   }
 
   function renderRoomTypeSegment() {
     return (
-      <View style={styles.segmentWrap}>
+      <View style={[styles.segmentWrap, { height: scale.tiny ? 38 : scale.compact ? 42 : 44 }]}>
         <Pressable onPress={() => setSelectedRoomType('free')} style={styles.segmentPressable}>
           <LinearGradient
-            colors={selectedRoomType === 'free' ? ['rgba(69,224,255,0.34)', 'rgba(153,70,255,0.28)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.018)']}
+            colors={selectedRoomType === 'free' ? ['rgba(53,124,255,0.84)', 'rgba(38,226,255,0.26)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.012)']}
             style={[styles.segmentButton, selectedRoomType === 'free' && styles.activeFreeSegment]}
           >
-            <Ionicons color={selectedRoomType === 'free' ? colors.cyan : colors.muted} name="moon" size={16} />
-            <Text style={[styles.segmentText, selectedRoomType === 'free' && styles.activeSegmentText]}>Ücretsiz</Text>
+            <Ionicons color={selectedRoomType === 'free' ? '#78E8FF' : colors.muted} name="moon" size={scale.tiny ? 18 : 21} />
+            <Text style={[styles.segmentText, { fontSize: scale.tiny ? 15 : 17 }, selectedRoomType === 'free' && styles.activeFreeSegmentText]}>Ücretsiz</Text>
           </LinearGradient>
         </Pressable>
         <Pressable onPress={() => setSelectedRoomType('paid')} style={styles.segmentPressable}>
           <LinearGradient
-            colors={selectedRoomType === 'paid' ? ['rgba(244,180,94,0.36)', 'rgba(255,79,185,0.24)', 'rgba(153,70,255,0.22)'] : ['rgba(255,255,255,0.035)', 'rgba(255,255,255,0.018)']}
+            colors={selectedRoomType === 'paid' ? ['rgba(244,180,94,0.45)', 'rgba(255,79,185,0.25)'] : ['rgba(255,255,255,0.025)', 'rgba(255,255,255,0.01)']}
             style={[styles.segmentButton, selectedRoomType === 'paid' && styles.activePaidSegment]}
           >
-            <Ionicons color={selectedRoomType === 'paid' ? colors.goldSoft : colors.muted} name="sparkles" size={16} />
-            <Text style={[styles.segmentText, selectedRoomType === 'paid' && styles.activeSegmentText]}>Ücretli</Text>
+            <Ionicons color={selectedRoomType === 'paid' ? colors.goldSoft : '#D9B977'} name="sparkles" size={scale.tiny ? 18 : 21} />
+            <Text style={[styles.segmentText, styles.paidSegmentText, { fontSize: scale.tiny ? 15 : 17 }, selectedRoomType === 'paid' && styles.activeSegmentText]}>Ücretli</Text>
           </LinearGradient>
         </Pressable>
       </View>
     );
   }
 
+  function renderUpgradeCard() {
+    const paid = selectedRoomType === 'paid';
+
+    return (
+      <LinearGradient
+        colors={paid ? ['rgba(69,224,255,0.13)', 'rgba(47,81,160,0.16)', 'rgba(9,12,34,0.82)'] : ['rgba(244,180,94,0.18)', 'rgba(255,79,185,0.1)', 'rgba(9,12,34,0.82)']}
+        style={[styles.upgradeCard, { height: scale.ctaHeight, padding: scale.tiny ? 8 : 10 }, paid && styles.freeReturnCard]}
+      >
+        <View style={[styles.upgradeIcon, { height: scale.tiny ? 40 : 48, width: scale.tiny ? 40 : 48 }, paid && styles.freeReturnIcon]}>
+          <Ionicons color={paid ? colors.cyan : colors.goldSoft} name={paid ? 'moon' : 'sparkles'} size={scale.tiny ? 21 : 25} />
+        </View>
+        <View style={styles.upgradeCopy}>
+          <Text numberOfLines={1} style={[styles.upgradeTitle, paid && styles.freeReturnTitle, { fontSize: scale.tiny ? 14 : 16 }]}>
+            {paid ? 'Ücretsiz odalara dön' : 'Ücretli odalara geç'}
+          </Text>
+          <Text numberOfLines={scale.tiny ? 1 : 2} style={[styles.upgradeText, { fontSize: scale.tiny ? 9 : 11 }]}>
+            {paid ? 'Hızlı, açık ve ücretsiz gece masalarına geri dön.' : 'Daha özel masalar, öncelikli eşleşme ve rozet ayrıcalıkları seni bekliyor.'}
+          </Text>
+        </View>
+        <Pressable onPress={() => setSelectedRoomType(paid ? 'free' : 'paid')} style={styles.upgradeButtonPressable}>
+          <LinearGradient
+            colors={paid ? ['rgba(69,224,255,0.18)', 'rgba(35,84,176,0.4)'] : ['rgba(255,214,139,0.18)', 'rgba(95,60,40,0.46)']}
+            style={[styles.upgradeButton, paid && styles.freeReturnButton]}
+          >
+            <Text numberOfLines={1} style={[styles.upgradeButtonText, paid && styles.freeReturnButtonText]}>
+              {paid ? 'Ücretsiz odalar' : 'Ücretli odaları keşfet'}
+            </Text>
+            <Ionicons color={paid ? colors.cyan : colors.goldSoft} name="chevron-forward" size={18} />
+          </LinearGradient>
+        </Pressable>
+      </LinearGradient>
+    );
+  }
+
   return (
     <NightBackground>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding, paddingTop: tiny ? 2 : 4 }]}>
-          <View style={[styles.header, { minHeight: tiny ? 38 : 44 }]}>
-            <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: tiny ? 19 : 21, height: tiny ? 38 : 42, width: tiny ? 38 : 42 }]}>
-              <Ionicons color={colors.text} name="chevron-back" size={tiny ? 24 : 26} />
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+        <View style={[styles.content, { gap: scale.gap, paddingBottom: screenLayout.contentBottomPadding, paddingHorizontal: scale.pad, paddingTop: screenLayout.contentTopPadding }]}>
+          <View style={[styles.header, { minHeight: scale.tiny ? 46 : scale.compact ? 52 : 56 }]}>
+            <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { height: scale.tiny ? 44 : 50, width: scale.tiny ? 44 : 50 }]}>
+              <Ionicons color={colors.text} name="chevron-back" size={scale.tiny ? 27 : 31} />
             </Pressable>
             <View style={styles.headerCopy}>
-              <Text style={[styles.headerTitle, { fontSize: tiny ? 25 : compact ? 28 : 31 }]}>Gece Modu</Text>
-              <Text style={[styles.headerSubtitle, { fontSize: tiny ? 11 : 12 }]}>22:00 - 06:00 • Türkiye saati</Text>
+              <Text style={[styles.headerTitle, { fontSize: scale.headerTitle }]}>Gece Modu</Text>
+              <Text style={[styles.headerSubtitle, { fontSize: scale.tiny ? 12 : 15 }]}>22:00 - 06:00 • Türkiye saati</Text>
             </View>
           </View>
 
@@ -360,21 +479,39 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
             </LinearGradient>
           ) : (
             <>
-              <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.heroCard, { minHeight: heroHeight, paddingHorizontal: tiny ? 8 : 10, paddingVertical: tiny ? 5 : 6 }]}>
-                <View style={[styles.heroIcon, { borderRadius: heroIconSize / 2, height: heroIconSize, width: heroIconSize }]}>
-                  <Ionicons color={colors.goldSoft} name="moon" size={tiny ? 17 : 19} />
+              <LinearGradient
+                colors={['rgba(255,255,255,0.09)', 'rgba(153,70,255,0.09)', 'rgba(8,11,32,0.82)']}
+                style={[styles.heroCard, { minHeight: scale.tiny ? 50 : scale.compact ? 56 : 60, padding: scale.tiny ? 6 : 8 }]}
+              >
+                <View style={[styles.heroIcon, { height: scale.tiny ? 40 : 46, width: scale.tiny ? 40 : 46 }]}>
+                  <Ionicons color={colors.goldSoft} name="moon" size={scale.tiny ? 23 : 27} />
                 </View>
                 <View style={styles.heroCopy}>
-                  <Text style={[styles.heroTitle, { fontSize: tiny ? 14 : 15 }]}>Gece odaları</Text>
-                  <Text numberOfLines={1} style={[styles.heroText, { fontSize: tiny ? 10 : 11 }]}>Bir oda seç ve masaya otur.</Text>
+                  <Text style={[styles.heroTitle, { fontSize: scale.tiny ? 16 : 19 }]}>Gece odaları</Text>
+                  <Text numberOfLines={1} style={[styles.heroText, { fontSize: scale.tiny ? 11 : 13 }]}>Bir oda seç ve masaya otur.</Text>
                 </View>
                 <View style={styles.heroBadge}>
-                  <Text style={styles.heroBadgeText}>8 oda</Text>
+                  <Text style={[styles.heroBadgeText, { fontSize: scale.tiny ? 13 : 15 }]}>8 oda</Text>
                 </View>
               </LinearGradient>
 
               {renderRoomTypeSegment()}
-              {renderSection(selectedSectionTitle, selectedSectionHint, visibleRooms, selectedRoomType)}
+
+              <View style={styles.sectionMetaRow}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={[styles.sectionIcon, selectedIsPaid ? styles.paidSectionIcon : styles.freeSectionIcon]}>
+                    <Ionicons color={selectedIsPaid ? colors.goldSoft : colors.cyan} name={selectedIsPaid ? 'sparkles' : 'moon'} size={scale.tiny ? 16 : 18} />
+                  </View>
+                  <Text style={[styles.sectionTitle, { fontSize: scale.tiny ? 17 : 20 }]}>{selectedSectionTitle}</Text>
+                </View>
+                <Text numberOfLines={1} style={[styles.sectionHint, { fontSize: scale.tiny ? 10 : 12 }]}>{selectedSectionHint}</Text>
+              </View>
+
+              <View style={[styles.roomGrid, { rowGap: scale.gap, columnGap: scale.gap }]}>
+                {visibleRooms.map(renderRoomCard)}
+              </View>
+
+              {renderUpgradeCard()}
             </>
           )}
         </View>
@@ -394,11 +531,11 @@ export function NightModeScreen({ navigation }: AppScreenProps<'NightMode'>) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.backgroundDeep,
   },
   backgroundDim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(5,6,20,0.34)',
+    backgroundColor: 'rgba(3,4,16,0.2)',
   },
   safeArea: {
     flex: 1,
@@ -406,49 +543,63 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     flex: 1,
-    maxWidth: layout.maxWidth,
-    paddingBottom: 6,
+    maxWidth: 720,
     width: '100%',
   },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 14,
   },
   backButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.075)',
-    borderColor: 'rgba(153,70,255,0.45)',
-    borderWidth: 1,
+    backgroundColor: 'rgba(23,17,56,0.7)',
+    borderColor: 'rgba(174,92,255,0.72)',
+    borderRadius: radius.pill,
+    borderWidth: 2,
     justifyContent: 'center',
+    shadowColor: colors.purple,
+    shadowOpacity: 0.65,
+    shadowRadius: 18,
   },
   headerCopy: {
     flex: 1,
+    minWidth: 0,
   },
   headerTitle: {
     color: colors.text,
     fontWeight: '900',
+    letterSpacing: 0,
+    textShadowColor: 'rgba(255,255,255,0.3)',
+    textShadowRadius: 8,
   },
   headerSubtitle: {
-    color: '#BFB4FF',
-    fontWeight: '700',
-    marginTop: 0,
+    color: '#B9A8FF',
+    fontWeight: '800',
+    marginTop: 1,
   },
   heroCard: {
     alignItems: 'center',
-    borderColor: 'rgba(153,70,255,0.5)',
-    borderRadius: radius.xl,
-    borderWidth: 1,
+    borderColor: 'rgba(174,92,255,0.62)',
+    borderRadius: 24,
+    borderWidth: 1.5,
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 10,
     overflow: 'hidden',
+    shadowColor: colors.purple,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
   },
   heroIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(153,70,255,0.24)',
-    borderColor: 'rgba(174,111,255,0.42)',
-    borderWidth: 1,
+    backgroundColor: 'rgba(93,50,177,0.35)',
+    borderColor: 'rgba(174,92,255,0.55)',
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
     justifyContent: 'center',
+    shadowColor: colors.purple,
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
   },
   heroCopy: {
     flex: 1,
@@ -459,35 +610,32 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   heroText: {
-    color: colors.muted,
+    color: '#C7C0E7',
     fontWeight: '700',
-    lineHeight: 14,
-    marginTop: 1,
+    marginTop: 2,
   },
   heroBadge: {
-    backgroundColor: 'rgba(153,70,255,0.34)',
-    borderColor: 'rgba(255,79,185,0.48)',
+    backgroundColor: 'rgba(92,44,174,0.58)',
+    borderColor: 'rgba(203,84,255,0.62)',
     borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    borderWidth: 1.5,
+    minWidth: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   heroBadgeText: {
     color: colors.text,
-    fontSize: 11,
     fontWeight: '900',
+    textAlign: 'center',
   },
   segmentWrap: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderColor: 'rgba(153,70,255,0.38)',
+    backgroundColor: 'rgba(10,11,31,0.78)',
+    borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 4,
+    gap: 8,
     padding: 3,
-    shadowColor: colors.purple,
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
   },
   segmentPressable: {
     flex: 1,
@@ -496,183 +644,160 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderColor: 'rgba(255,255,255,0.08)',
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    flex: 1,
     flexDirection: 'row',
-    gap: 6,
-    height: 32,
+    gap: 7,
     justifyContent: 'center',
   },
   activeFreeSegment: {
-    borderColor: 'rgba(69,224,255,0.5)',
+    borderColor: 'rgba(82,208,255,0.95)',
     shadowColor: colors.cyan,
-    shadowOpacity: 0.28,
-    shadowRadius: 14,
+    shadowOpacity: 0.8,
+    shadowRadius: 18,
   },
   activePaidSegment: {
-    borderColor: 'rgba(244,180,94,0.54)',
+    borderColor: 'rgba(255,218,138,0.82)',
     shadowColor: colors.goldSoft,
-    shadowOpacity: 0.28,
-    shadowRadius: 14,
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
   },
   segmentText: {
     color: colors.muted,
-    fontSize: 13,
     fontWeight: '900',
+  },
+  paidSegmentText: {
+    color: colors.goldSoft,
+  },
+  activeFreeSegmentText: {
+    color: colors.text,
+    textShadowColor: 'rgba(69,224,255,0.7)',
+    textShadowRadius: 12,
   },
   activeSegmentText: {
     color: colors.text,
   },
-  section: {
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    gap: 4,
-    overflow: 'hidden',
-    padding: 5,
-    position: 'relative',
-  },
-  freeSection: {
-    borderColor: 'rgba(69,224,255,0.28)',
-  },
-  paidSection: {
-    borderColor: 'rgba(244,180,94,0.3)',
-  },
-  sectionGlow: {
-    borderRadius: 999,
-    height: 140,
-    position: 'absolute',
-    right: -54,
-    top: -66,
-    width: 140,
-  },
-  freeSectionGlow: {
-    backgroundColor: 'rgba(69,224,255,0.12)',
-  },
-  paidSectionGlow: {
-    backgroundColor: 'rgba(244,180,94,0.15)',
-  },
   sectionMetaRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
     justifyContent: 'space-between',
   },
   sectionTitleWrap: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
+    flexShrink: 0,
+    gap: 9,
     minWidth: 0,
   },
   sectionIcon: {
     alignItems: 'center',
-    borderRadius: 13,
-    borderWidth: 1,
-    height: 24,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    height: 30,
     justifyContent: 'center',
-    width: 24,
+    width: 30,
   },
   freeSectionIcon: {
-    backgroundColor: 'rgba(69,224,255,0.12)',
-    borderColor: 'rgba(69,224,255,0.32)',
+    backgroundColor: 'rgba(69,224,255,0.16)',
+    borderColor: 'rgba(69,224,255,0.52)',
   },
   paidSectionIcon: {
-    backgroundColor: 'rgba(244,180,94,0.14)',
-    borderColor: 'rgba(244,180,94,0.34)',
+    backgroundColor: 'rgba(244,180,94,0.16)',
+    borderColor: 'rgba(244,180,94,0.5)',
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 14,
-    fontWeight: '900',
     flexShrink: 1,
+    fontWeight: '900',
   },
   sectionHint: {
-    color: colors.muted,
-    flexShrink: 1,
-    fontSize: 10,
+    color: '#BEB9DF',
+    flex: 1,
     fontWeight: '700',
     textAlign: 'right',
   },
   roomGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 7,
   },
   roomPressable: {
-    width: '49%',
+    flexShrink: 0,
   },
   roomCard: {
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    minHeight: 0,
+    borderRadius: 17,
+    borderWidth: 1.4,
     overflow: 'hidden',
-    padding: 11,
   },
   freeRoomCard: {
-    borderColor: 'rgba(69,224,255,0.5)',
+    borderColor: 'rgba(51,169,255,0.82)',
     shadowColor: colors.cyan,
-    shadowOpacity: 0.22,
+    shadowOpacity: 0.32,
     shadowRadius: 16,
   },
   paidRoomCard: {
-    borderColor: 'rgba(244,180,94,0.54)',
+    borderColor: 'rgba(255,204,125,0.78)',
     shadowColor: colors.pink,
-    shadowOpacity: 0.26,
-    shadowRadius: 18,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+  },
+  fullRoomCard: {
+    opacity: 0.72,
+  },
+  starDust: {
+    backgroundColor: 'rgba(88,56,195,0.18)',
+    borderRadius: 80,
+    height: 116,
+    position: 'absolute',
+    right: -44,
+    top: 54,
+    width: 116,
+  },
+  paidStarDust: {
+    backgroundColor: 'rgba(255,79,185,0.12)',
   },
   cardAccent: {
     bottom: 0,
-    height: 3,
-    left: 0,
+    height: 2,
+    left: 20,
     position: 'absolute',
-    right: 0,
+    right: 20,
   },
   freeCardAccent: {
-    backgroundColor: colors.cyan,
+    backgroundColor: 'rgba(69,224,255,0.9)',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.75,
+    shadowRadius: 9,
   },
   paidCardAccent: {
-    backgroundColor: colors.goldSoft,
-  },
-  cardSheen: {
-    backgroundColor: 'rgba(69,224,255,0.1)',
-    borderRadius: 999,
-    height: 86,
-    position: 'absolute',
-    right: -38,
-    top: -44,
-    width: 86,
-  },
-  paidCardSheen: {
-    backgroundColor: 'rgba(244,180,94,0.13)',
-  },
-  fullRoomCard: {
-    opacity: 0.78,
+    backgroundColor: 'rgba(255,218,138,0.95)',
+    shadowColor: colors.goldSoft,
+    shadowOpacity: 0.7,
+    shadowRadius: 9,
   },
   roomCardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 8,
+    gap: 5,
     justifyContent: 'space-between',
   },
   roomName: {
     color: colors.text,
     flex: 1,
-    fontSize: 13,
     fontWeight: '900',
   },
   roomCount: {
     color: colors.text,
-    fontSize: 15,
     fontWeight: '900',
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 6,
   },
   roomTag: {
-    backgroundColor: 'rgba(69,224,255,0.12)',
-    borderColor: 'rgba(69,224,255,0.32)',
+    backgroundColor: 'rgba(38,145,217,0.23)',
+    borderColor: 'rgba(69,224,255,0.48)',
     borderRadius: radius.pill,
     borderWidth: 1,
     color: colors.cyan,
@@ -680,90 +805,88 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     overflow: 'hidden',
     paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingVertical: 2,
   },
   paidTag: {
     backgroundColor: 'rgba(244,180,94,0.15)',
-    borderColor: 'rgba(244,180,94,0.32)',
+    borderColor: 'rgba(244,180,94,0.44)',
     color: colors.goldSoft,
   },
   fullTag: {
     backgroundColor: 'rgba(255,124,156,0.14)',
-    borderColor: 'rgba(255,124,156,0.28)',
+    borderColor: 'rgba(255,124,156,0.35)',
     color: colors.danger,
   },
   miniRoomScene: {
     alignItems: 'center',
-    height: 116,
     justifyContent: 'center',
-    marginTop: 8,
     position: 'relative',
+  },
+  orbit: {
+    borderColor: 'rgba(123,75,245,0.62)',
+    borderRadius: 70,
+    borderWidth: 1.2,
+    height: '76%',
+    position: 'absolute',
+    width: '54%',
+  },
+  paidOrbit: {
+    borderColor: 'rgba(244,180,94,0.42)',
   },
   miniTable: {
     alignItems: 'center',
-    backgroundColor: 'rgba(6,8,22,0.74)',
-    borderColor: 'rgba(174,111,255,0.68)',
-    borderRadius: 27,
-    borderWidth: 1,
-    height: 54,
+    backgroundColor: 'rgba(10,17,54,0.9)',
+    borderColor: 'rgba(69,224,255,0.72)',
+    borderWidth: 1.4,
     justifyContent: 'center',
     shadowColor: colors.cyan,
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    width: 54,
+    shadowOpacity: 0.5,
+    shadowRadius: 13,
   },
   paidMiniTable: {
-    backgroundColor: 'rgba(48,28,20,0.78)',
-    borderColor: 'rgba(244,180,94,0.52)',
+    backgroundColor: 'rgba(48,28,24,0.86)',
+    borderColor: 'rgba(244,180,94,0.68)',
     shadowColor: colors.goldSoft,
   },
   miniSeat: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderColor: 'rgba(126,135,217,0.42)',
-    borderRadius: 18,
-    borderWidth: 1,
-    height: 36,
+    backgroundColor: 'rgba(57,42,116,0.86)',
+    borderColor: 'rgba(132,94,255,0.58)',
+    borderWidth: 1.3,
     justifyContent: 'center',
     position: 'absolute',
-    width: 44,
   },
   paidMiniSeat: {
-    backgroundColor: 'rgba(244,180,94,0.08)',
-    borderColor: 'rgba(244,180,94,0.34)',
+    backgroundColor: 'rgba(80,48,64,0.86)',
+    borderColor: 'rgba(255,181,113,0.52)',
   },
   filledMiniSeat: {
-    backgroundColor: 'rgba(153,70,255,0.24)',
-    borderColor: 'rgba(247,238,255,0.24)',
+    backgroundColor: 'rgba(186,67,255,0.38)',
+    borderColor: 'rgba(255,99,241,0.95)',
+    shadowColor: colors.pink,
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
   },
   paidFilledMiniSeat: {
-    backgroundColor: 'rgba(244,180,94,0.18)',
-    borderColor: 'rgba(255,213,154,0.38)',
-  },
-  miniSeatTop: {
-    top: 0,
-  },
-  miniSeatRight: {
-    right: 0,
-    top: 40,
-  },
-  miniSeatBottom: {
-    bottom: 0,
-  },
-  miniSeatLeft: {
-    left: 0,
-    top: 40,
+    backgroundColor: 'rgba(244,180,94,0.24)',
+    borderColor: 'rgba(255,213,154,0.88)',
   },
   emptyMiniSeatText: {
-    color: colors.muted,
-    fontSize: 10,
+    color: '#D6D2F0',
     fontWeight: '800',
+  },
+  filledSeatName: {
+    color: colors.text,
+    fontWeight: '900',
+    marginTop: 1,
+    maxWidth: '92%',
+    textAlign: 'center',
   },
   roomCardFooter: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 4,
     justifyContent: 'space-between',
-    marginTop: 6,
   },
   timePill: {
     alignItems: 'center',
@@ -771,46 +894,115 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   timeText: {
-    color: colors.muted,
-    fontSize: 11,
+    color: '#C5C7F4',
     fontWeight: '800',
   },
   priceText: {
     color: colors.goldSoft,
     flexShrink: 1,
-    fontSize: 10,
     fontWeight: '900',
     textAlign: 'right',
   },
   inlineButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(69,224,255,0.14)',
-    borderColor: 'rgba(126,135,255,0.7)',
+    borderColor: 'rgba(99,189,255,0.9)',
     borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 34,
+    borderWidth: 1.3,
     justifyContent: 'center',
-    marginTop: 7,
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
   },
   paidInlineButton: {
-    backgroundColor: 'rgba(244,180,94,0.13)',
-    borderColor: 'rgba(255,79,185,0.42)',
+    borderColor: 'rgba(255,202,128,0.78)',
+    shadowColor: colors.goldSoft,
   },
   disabledInlineButton: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    opacity: 0.62,
   },
   inlineButtonText: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '900',
+  },
+  upgradeCard: {
+    alignItems: 'center',
+    borderColor: 'rgba(255,218,138,0.58)',
+    borderRadius: 22,
+    borderWidth: 1.3,
+    flexDirection: 'row',
+    gap: 8,
+    overflow: 'hidden',
+    shadowColor: colors.goldSoft,
+    shadowOpacity: 0.26,
+    shadowRadius: 16,
+  },
+  freeReturnCard: {
+    borderColor: 'rgba(69,224,255,0.44)',
+    shadowColor: colors.cyan,
+  },
+  upgradeIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(244,180,94,0.13)',
+    borderColor: 'rgba(255,218,138,0.55)',
+    borderRadius: radius.pill,
+    borderWidth: 1.4,
+    justifyContent: 'center',
+  },
+  freeReturnIcon: {
+    backgroundColor: 'rgba(69,224,255,0.1)',
+    borderColor: 'rgba(69,224,255,0.45)',
+  },
+  upgradeCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  upgradeTitle: {
+    color: colors.goldSoft,
+    fontWeight: '900',
+  },
+  freeReturnTitle: {
+    color: colors.cyan,
+  },
+  upgradeText: {
+    color: '#C9C3D6',
+    fontWeight: '700',
+    lineHeight: 14,
+    marginTop: 1,
+  },
+  upgradeButtonPressable: {
+    flexShrink: 0,
+    maxWidth: '42%',
+  },
+  upgradeButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(255,218,138,0.62)',
+    borderRadius: radius.pill,
+    borderWidth: 1.2,
+    flexDirection: 'row',
+    gap: 5,
+    minHeight: 36,
+    paddingHorizontal: 10,
+  },
+  freeReturnButton: {
+    borderColor: 'rgba(69,224,255,0.52)',
+  },
+  upgradeButtonText: {
+    color: colors.goldSoft,
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  freeReturnButtonText: {
+    color: colors.cyan,
   },
   closedCard: {
     alignItems: 'center',
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.xl,
+    gap: 12,
+    padding: 24,
   },
   closedText: {
     color: colors.text,
@@ -824,8 +1016,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.xl,
+    gap: 12,
+    padding: 24,
   },
   loadingText: {
     color: colors.muted,

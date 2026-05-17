@@ -1,22 +1,27 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { ActivityIndicator, Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar } from './Avatar';
-import { colors, layout, radius, spacing } from '../constants/theme';
-import { defaultProfile, getAvatarById } from '../data/mockData';
+import { colors, radius, spacing } from '../constants/theme';
 import { FriendSummary } from '../types';
+import { getContentMaxWidth, getScreenMetrics } from '../utils/responsive';
+import { UserAvatar } from './UserAvatar';
 
 type FriendIncomingCallModalProps = {
   actionPending?: boolean;
   callerName: string;
   callerProfile: FriendSummary | null;
+  callState?: 'ringing' | 'rejected' | 'missed' | 'cancelled';
+  currentUserId?: string | null;
   mode?: 'incoming' | 'outgoing';
   onAccept?: () => void;
   onMessage: () => void;
   onReject: () => void;
+  peerAvatarId?: string | null;
+  peerProfileLoading?: boolean;
+  peerUserId?: string | null;
   visible: boolean;
 };
 
@@ -83,10 +88,15 @@ export function FriendIncomingCallModal({
   actionPending = false,
   callerName,
   callerProfile,
+  callState = 'ringing',
+  currentUserId,
   mode = 'incoming',
   onAccept,
   onMessage,
   onReject,
+  peerAvatarId,
+  peerProfileLoading = false,
+  peerUserId,
   visible,
 }: FriendIncomingCallModalProps) {
   const { width, height } = useWindowDimensions();
@@ -94,7 +104,8 @@ export function FriendIncomingCallModal({
   const ringPulse = useRef(new Animated.Value(0)).current;
   const glowPulse = useRef(new Animated.Value(0)).current;
   const dotPulse = useRef(new Animated.Value(0)).current;
-  const compact = width <= 390 || height <= 760;
+  const screen = getScreenMetrics({ width, height });
+  const compact = screen.isCompactPhone || height <= 760;
   const short = height < 720;
   const avatarSize = short ? 142 : compact ? 158 : 188;
   const ringSize = avatarSize + (short ? 34 : 48);
@@ -102,10 +113,22 @@ export function FriendIncomingCallModal({
   const actionSize = compact ? 66 : 76;
   const actionWidth = compact ? 82 : 96;
   const titleSize = compact ? 44 : 52;
-  const contentMaxWidth = Math.min(layout.maxWidth, width);
+  const contentMaxWidth = Math.min(getContentMaxWidth(width), width);
   const headerTopPadding = Math.max(insets.top + (short ? spacing.lg : spacing.xl), short ? 56 : 68);
-  const avatar = useMemo(() => getAvatarById(callerProfile?.avatarId ?? defaultProfile.avatarId), [callerProfile?.avatarId]);
   const isOutgoing = mode === 'outgoing';
+  const isTerminal = callState !== 'ringing';
+  const displayName = peerProfileLoading ? 'Profil yukleniyor' : callerName;
+  const statusMessage = callState === 'rejected'
+    ? `${callerName} aramanızı reddetti`
+    : callState === 'missed'
+      ? 'Çağrı cevaplanmadı'
+      : callState === 'cancelled'
+        ? 'Çağrı iptal edildi'
+        : peerProfileLoading
+          ? 'Profil bilgileri hazirlaniyor'
+        : isOutgoing
+          ? 'Aranıyor'
+          : 'Seni arıyor';
 
   useEffect(() => {
     if (!visible) {
@@ -171,10 +194,11 @@ export function FriendIncomingCallModal({
             <View style={[styles.header, { paddingTop: headerTopPadding }]}>
               <Text style={styles.eyebrow}>{isOutgoing ? 'ARKADAŞIN ARANIYOR' : 'ARKADAŞIN SENİ ARIYOR'}</Text>
               <Text adjustsFontSizeToFit minimumFontScale={0.76} numberOfLines={1} style={[styles.callerName, { fontSize: titleSize }]}>
-                {callerName}
+                {displayName}
               </Text>
               <View style={styles.callingRow}>
-                <Text style={styles.callingText}>{isOutgoing ? 'Aranıyor' : 'Seni arıyor'}</Text>
+                <Text style={styles.callingText}>{statusMessage}</Text>
+                {isTerminal ? null : (
                 <View style={styles.dots}>
                   {[0, 1, 2].map((dot) => (
                     <Animated.View
@@ -189,6 +213,7 @@ export function FriendIncomingCallModal({
                     />
                   ))}
                 </View>
+                )}
               </View>
             </View>
 
@@ -210,7 +235,21 @@ export function FriendIncomingCallModal({
               <Animated.View style={[styles.neonRingWrap, { transform: [{ scale: glowScale }] }]}>
                 <LinearGradient colors={haloGradient} style={[styles.neonRing, { width: ringSize, height: ringSize, borderRadius: ringSize / 2 }]}>
                   <View style={[styles.avatarShell, { width: ringSize - 14, height: ringSize - 14, borderRadius: (ringSize - 14) / 2 }]}>
-                    <Avatar avatar={avatar} size={avatarSize} />
+                    {peerProfileLoading ? (
+                      <View style={[styles.avatarLoading, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}>
+                        <ActivityIndicator color="#F8A9FF" size="large" />
+                      </View>
+                    ) : (
+                      <UserAvatar
+                        avatarId={peerAvatarId ?? callerProfile?.avatarId}
+                        avatarSourceType="peer-profile"
+                        currentUserId={currentUserId}
+                        renderedUserId={peerUserId ?? callerProfile?.id}
+                        screen={isOutgoing ? 'outgoing-call' : 'incoming-call'}
+                        size={avatarSize}
+                        username={callerName}
+                      />
+                    )}
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -410,6 +449,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.18)',
     overflow: 'hidden',
+  },
+  avatarLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   onlineBadge: {
     position: 'absolute',

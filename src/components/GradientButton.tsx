@@ -14,6 +14,7 @@ type GradientButtonProps = {
   compact?: boolean;
   large?: boolean;
   disabled?: boolean;
+  muted?: boolean;
   rightSlot?: ReactNode;
 };
 
@@ -26,6 +27,7 @@ export function GradientButton({
   compact = false,
   large = false,
   disabled = false,
+  muted = false,
   rightSlot,
 }: GradientButtonProps) {
   const content = (
@@ -46,13 +48,13 @@ export function GradientButton({
         : gradients.primary;
 
   return (
-    <Pressable disabled={disabled} onPress={onPress} style={disabled && styles.disabledWrap}>
+    <Pressable disabled={disabled} onPress={onPress} style={(disabled || muted) && styles.disabledWrap}>
       {variant === 'primary' || variant === 'gold' ? (
         <LinearGradient
           colors={[...gradientColors]}
           end={{ x: 1, y: 0.5 }}
           start={{ x: 0, y: 0.5 }}
-          style={[styles.button, compact && styles.compactButton, large && styles.largeButton, disabled && styles.disabledButton]}
+          style={[styles.button, compact && styles.compactButton, large && styles.largeButton, (disabled || muted) && styles.disabledButton]}
         >
           {content}
         </LinearGradient>
@@ -64,7 +66,7 @@ export function GradientButton({
             compact && styles.compactButton,
             large && styles.largeButton,
             variant === 'secondary' ? styles.secondary : styles.ghost,
-            disabled && styles.disabledButton,
+            (disabled || muted) && styles.disabledButton,
           ]}
         >
           {content}

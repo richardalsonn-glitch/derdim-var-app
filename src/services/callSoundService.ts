@@ -1,6 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 import { logSafeDebug, logSafeWarn } from '../lib/safeLogger';
+import { isVoiceSessionActive } from './voiceService';
 
 const OUTGOING_CALL_SOURCE = require('../../assets/sounds/aramasesi.m4a');
 const INCOMING_RINGTONE_SOURCE = require('../../assets/sounds/telefonzilsesi.m4a');
@@ -9,12 +10,17 @@ type CallSoundKind = 'outgoing' | 'incoming';
 
 let outgoingPlayer: AudioPlayer | null = null;
 let incomingPlayer: AudioPlayer | null = null;
-let incomingReplayTimer: ReturnType<typeof setTimeout> | null = null;
 let incomingPlayToken = 0;
 
-const INCOMING_MANUAL_REPLAY_MS = 1100;
-
 async function configurePlaybackMode() {
+  if (isVoiceSessionActive()) {
+    logSafeDebug('[call-sound] playback skipped during active voice session', null, {
+      functionName: 'configurePlaybackMode',
+      source: 'expo-audio',
+    });
+    return false;
+  }
+
   try {
     await setAudioModeAsync({
       playsInSilentMode: true,
@@ -29,6 +35,8 @@ async function configurePlaybackMode() {
       source: 'expo-audio',
     });
   }
+
+  return true;
 }
 
 function createPlayer(kind: CallSoundKind) {
@@ -70,65 +78,30 @@ function releasePlayer(player: AudioPlayer | null) {
   }
 }
 
-function stopIncomingReplayTimer() {
-  if (incomingReplayTimer) {
-    clearTimeout(incomingReplayTimer);
-    incomingReplayTimer = null;
-  }
-}
-
-function scheduleIncomingManualReplay(token: number) {
-  stopIncomingReplayTimer();
-  incomingReplayTimer = setTimeout(() => {
-    incomingReplayTimer = null;
-
-    if (token !== incomingPlayToken) {
-      return;
-    }
-
-    void playIncomingRingtoneOnce(token);
-  }, INCOMING_MANUAL_REPLAY_MS);
-}
-
-async function playIncomingRingtoneOnce(token: number) {
+async function playIncomingRingtoneLoop(token: number) {
   if (token !== incomingPlayToken) {
     return;
   }
 
-  releasePlayer(incomingPlayer);
-  incomingPlayer = null;
+  if (!incomingPlayer) {
+    incomingPlayer = createPlayer('incoming');
+  }
 
-  const player = createPlayer('incoming');
+  const player = incomingPlayer;
 
   if (!player) {
-    scheduleIncomingManualReplay(token);
     return;
   }
 
-  incomingPlayer = player;
-
   try {
-    player.loop = false;
+    player.loop = true;
     await player.seekTo(0);
-
-    if (token !== incomingPlayToken || incomingPlayer !== player) {
-      releasePlayer(player);
-      if (incomingPlayer === player) {
-        incomingPlayer = null;
-      }
-      return;
-    }
-
     player.play();
   } catch (error) {
-    logSafeDebug('[call-sound] incoming replay skipped', error, {
-      functionName: 'playIncomingRingtoneOnce',
+    logSafeDebug('[call-sound] incoming play skipped', error, {
+      functionName: 'playIncomingRingtoneLoop',
       source: 'telefonzilsesi.m4a',
     });
-  }
-
-  if (token === incomingPlayToken) {
-    scheduleIncomingManualReplay(token);
   }
 }
 
@@ -139,7 +112,6 @@ function stopOutgoingCallToneInternal() {
 
 function stopIncomingRingtoneInternal() {
   incomingPlayToken += 1;
-  stopIncomingReplayTimer();
   releasePlayer(incomingPlayer);
   incomingPlayer = null;
 }
@@ -148,20 +120,27 @@ async function playLooping(kind: CallSoundKind) {
   if (kind === 'incoming') {
     const token = incomingPlayToken + 1;
     incomingPlayToken = token;
-    stopIncomingReplayTimer();
     stopOutgoingCallToneInternal();
 
-    await configurePlaybackMode();
+    const configured = await configurePlaybackMode();
+
+    if (!configured) {
+      return;
+    }
 
     if (token !== incomingPlayToken) {
       return;
     }
 
-    void playIncomingRingtoneOnce(token);
+    void playIncomingRingtoneLoop(token);
     return;
   }
 
-  await configurePlaybackMode();
+  const configured = await configurePlaybackMode();
+
+  if (!configured) {
+    return;
+  }
 
   if (kind === 'outgoing') {
     stopIncomingRingtoneInternal();
@@ -209,4 +188,8 @@ export function stopIncomingRingtone() {
 export function stopAllCallSounds() {
   stopOutgoingCallToneInternal();
   stopIncomingRingtoneInternal();
+}
+
+export function isAnyCallSoundPlaying() {
+  return Boolean(outgoingPlayer || incomingPlayer);
 }

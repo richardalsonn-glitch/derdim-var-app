@@ -1,13 +1,16 @@
-import { Pressable } from 'react-native';
+import { Image, ImageSourcePropType, Pressable } from 'react-native';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, radius, spacing } from '../constants/theme';
 import { AvatarOption } from '../types';
+import { getAvatarAssetSource } from '../utils/avatarAssets';
+import { getSymbolDefinition, isSymbolId } from '../utils/symbolAvatar';
 
 type AvatarProps = {
   avatar: AvatarOption;
+  source?: ImageSourcePropType;
   size?: number;
   selected?: boolean;
   label?: string;
@@ -30,6 +33,7 @@ const accessoryIcons = {
 
 export function Avatar({
   avatar,
+  source,
   size = 88,
   selected = false,
   label,
@@ -38,17 +42,32 @@ export function Avatar({
   style,
   onPress,
 }: AvatarProps) {
+  const avatarAsset = source ?? getAvatarAssetSource(avatar.id);
+  const symbol = isSymbolId(avatar.id) ? getSymbolDefinition(avatar.id) : null;
   const body = (
-    <LinearGradient colors={avatar.palette} style={[styles.core, { width: size, height: size, borderRadius: size / 2 }, selected && styles.selectedCore]}>
+    <LinearGradient colors={symbol?.palette ?? avatar.palette} style={[styles.core, { width: size, height: size, borderRadius: size / 2 }, selected && styles.selectedCore]}>
       <View style={[styles.halo, { backgroundColor: avatar.accentColor }]} />
-      <View style={[styles.head, { backgroundColor: avatar.skinTone, width: size * 0.34, height: size * 0.34, borderRadius: size * 0.17, top: size * 0.22 }]} />
-      <View style={[styles.hairCap, { backgroundColor: avatar.hairColor, width: size * 0.42, height: size * 0.24, borderTopLeftRadius: size * 0.24, borderTopRightRadius: size * 0.24, top: size * 0.17 }]} />
-      <View style={[styles.body, { backgroundColor: avatar.outfitColor, width: size * 0.58, height: size * 0.3, borderRadius: size * 0.18, bottom: size * 0.15 }]} />
-      <View style={[styles.shoulderLeft, { backgroundColor: avatar.outfitColor, width: size * 0.18, height: size * 0.14, left: size * 0.18, bottom: size * 0.2 }]} />
-      <View style={[styles.shoulderRight, { backgroundColor: avatar.outfitColor, width: size * 0.18, height: size * 0.14, right: size * 0.18, bottom: size * 0.2 }]} />
-      <View style={[styles.accessoryBubble, { backgroundColor: 'rgba(4, 7, 20, 0.62)' }]}>
-        <Ionicons color={avatar.accentColor} name={accessoryIcons[avatar.accessory]} size={size * 0.17} />
-      </View>
+      {symbol ? (
+        <Ionicons color={symbol.accent} name={symbol.icon} size={Math.max(18, Math.round(size * 0.46))} />
+      ) : avatarAsset ? (
+        <>
+          <Image resizeMode="cover" source={avatarAsset} style={styles.avatarImage} />
+          <LinearGradient colors={['rgba(5, 7, 20, 0)', 'rgba(5, 7, 20, 0.26)']} style={styles.imageShade} />
+        </>
+      ) : (
+        <>
+          <View style={[styles.head, { backgroundColor: avatar.skinTone, width: size * 0.34, height: size * 0.34, borderRadius: size * 0.17, top: size * 0.22 }]} />
+          <View style={[styles.hairCap, { backgroundColor: avatar.hairColor, width: size * 0.42, height: size * 0.24, borderTopLeftRadius: size * 0.24, borderTopRightRadius: size * 0.24, top: size * 0.17 }]} />
+          <View style={[styles.body, { backgroundColor: avatar.outfitColor, width: size * 0.58, height: size * 0.3, borderRadius: size * 0.18, bottom: size * 0.15 }]} />
+          <View style={[styles.shoulderLeft, { backgroundColor: avatar.outfitColor, width: size * 0.18, height: size * 0.14, left: size * 0.18, bottom: size * 0.2 }]} />
+          <View style={[styles.shoulderRight, { backgroundColor: avatar.outfitColor, width: size * 0.18, height: size * 0.14, right: size * 0.18, bottom: size * 0.2 }]} />
+        </>
+      )}
+      {symbol ? null : (
+        <View style={[styles.accessoryBubble, { backgroundColor: 'rgba(4, 7, 20, 0.62)' }]}>
+          <Ionicons color={avatar.accentColor} name={accessoryIcons[avatar.accessory]} size={size * 0.17} />
+        </View>
+      )}
     </LinearGradient>
   );
 
@@ -106,6 +125,13 @@ const styles = StyleSheet.create({
     height: '76%',
     borderRadius: 999,
     opacity: 0.16,
+  },
+  avatarImage: {
+    height: '100%',
+    width: '100%',
+  },
+  imageShade: {
+    ...StyleSheet.absoluteFillObject,
   },
   head: {
     position: 'absolute',

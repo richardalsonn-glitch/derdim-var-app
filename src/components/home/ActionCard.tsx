@@ -12,13 +12,14 @@ type ActionCardProps = {
   gradient: readonly [string, string, string];
   glowColor: string;
   compact?: boolean;
+  dense?: boolean;
   disabled?: boolean;
   height?: number;
   palette: HomePalette;
   onPress: () => void;
 };
 
-export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact = false, disabled = false, height, palette, onPress }: ActionCardProps) {
+export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact = false, dense = false, disabled = false, height, palette, onPress }: ActionCardProps) {
   return (
     <Pressable
       disabled={disabled}
@@ -36,6 +37,7 @@ export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact
         style={[
           styles.card,
           compact && styles.cardCompact,
+          dense && styles.cardDense,
           height ? { height } : null,
           {
             borderColor: `${palette.text}26`,
@@ -48,23 +50,23 @@ export function ActionCard({ title, subtitle, icon, gradient, glowColor, compact
         <View pointerEvents="none" style={[styles.wave, styles.waveOne]} />
         <View pointerEvents="none" style={[styles.wave, styles.waveTwo]} />
 
-        <View style={[styles.iconWrap, compact && styles.iconWrapCompact]}>
+        <View style={[styles.iconWrap, compact && styles.iconWrapCompact, dense && styles.iconWrapDense]}>
           <LinearGradient colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0.08)']} style={styles.iconGradient}>
-            <Ionicons color={palette.text} name={icon} size={compact ? 26 : 32} />
+            <Ionicons color={palette.text} name={icon} size={dense ? 22 : compact ? 26 : 32} />
           </LinearGradient>
         </View>
 
         <View style={styles.copy}>
-          <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.title, compact && styles.titleCompact]}>
+          <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.title, compact && styles.titleCompact, dense && styles.titleDense]}>
             {title}
           </Text>
-          <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.subtitle, compact && styles.subtitleCompact]}>
+          <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.subtitle, compact && styles.subtitleCompact, dense && styles.subtitleDense]}>
             {subtitle}
           </Text>
         </View>
 
         <View style={styles.arrowWrap}>
-          <Ionicons color={palette.text} name="chevron-forward" size={compact ? 22 : 24} />
+          <Ionicons color={palette.text} name="chevron-forward" size={dense ? 18 : compact ? 22 : 24} />
         </View>
       </LinearGradient>
     </Pressable>
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    minHeight: 112,
+    minHeight: 0,
     borderRadius: 26,
     overflow: 'hidden',
     paddingHorizontal: 18,
@@ -95,10 +97,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
   },
   cardCompact: {
-    minHeight: 98,
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 12,
+  },
+  cardDense: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    gap: 9,
   },
   glow: {
     position: 'absolute',
@@ -158,6 +164,11 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
   },
+  iconWrapDense: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
   iconGradient: {
     flex: 1,
     alignItems: 'center',
@@ -177,6 +188,9 @@ const styles = StyleSheet.create({
   titleCompact: {
     fontSize: 24,
   },
+  titleDense: {
+    fontSize: 20,
+  },
   subtitle: {
     color: 'rgba(248, 241, 255, 0.92)',
     fontSize: 14,
@@ -184,6 +198,9 @@ const styles = StyleSheet.create({
   },
   subtitleCompact: {
     fontSize: 12,
+  },
+  subtitleDense: {
+    fontSize: 11,
   },
   arrowWrap: {
     width: 28,

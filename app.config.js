@@ -4,7 +4,12 @@ module.exports = ({ config }) => {
   const profile = process.env.EAS_BUILD_PROFILE ?? '';
   const isDevelopmentBuild = profile === 'development';
   const livekitFlag = process.env.EXPO_PUBLIC_ENABLE_LIVEKIT ?? '';
-  const isLiveKitEnabled = livekitFlag.trim().toLowerCase() === 'true';
+  const normalizedLiveKitFlag = livekitFlag.trim().toLowerCase();
+  const hasLiveKitClientConfig = Boolean(
+    process.env.EXPO_PUBLIC_LIVEKIT_URL?.trim() &&
+      process.env.EXPO_PUBLIC_LIVEKIT_TOKEN_ENDPOINT?.trim(),
+  );
+  const isLiveKitEnabled = isDevelopmentBuild || normalizedLiveKitFlag === 'true' || (normalizedLiveKitFlag !== 'false' && hasLiveKitClientConfig);
 
   const baseExpoConfig = {
     ...config,

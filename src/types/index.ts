@@ -6,7 +6,7 @@ export type MatchRole = 'derdim-var' | 'derman-olan';
 
 export type MatchmakingMode = 'derdim' | 'derman';
 
-export type MatchmakingStatus = 'waiting' | 'matched';
+export type MatchmakingStatus = 'waiting' | 'matched' | 'ended' | 'cancelled' | 'expired';
 
 export type TopicTag = 'İlişki' | 'İş' | 'Para' | 'Sağlık' | 'Genel';
 
@@ -28,6 +28,8 @@ export type GiftItem = {
   name: string;
   symbol: string;
   price: string;
+  priceTry: number;
+  bonusSeconds: number;
   caption: string;
   accent: [string, string];
 };
@@ -136,6 +138,7 @@ export type AppProfile = {
   age: number;
   birthDate?: string;
   relationshipStatus: string;
+  onboardingReasons?: string[];
   joinDate: string;
   plan: MembershipPlan;
   avatarId: string;
@@ -171,7 +174,12 @@ export type MatchmakingQueueRow = {
   mode: MatchmakingMode;
   status: MatchmakingStatus;
   matched_with: string | null;
+  match_room_id?: string | null;
+  room_id?: string | null;
+  ended_at?: string | null;
+  ended_by?: string | null;
   created_at: string;
+  updated_at?: string | null;
 };
 
 export type MatchParticipantProfile = {
@@ -179,6 +187,8 @@ export type MatchParticipantProfile = {
   username: string;
   avatarId: string;
   plan: MembershipPlan;
+  isOnline?: boolean;
+  lastSeenAt?: string | null;
 };
 
 export type MatchmakingState = {

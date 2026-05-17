@@ -3,14 +3,17 @@ import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Avatar } from '../Avatar';
 import { radius } from '../../constants/theme';
+import { Gender } from '../../types';
+import { UserAvatar } from '../UserAvatar';
 import { DrawerItem, HomePalette } from './types';
 
 type DrawerMenuProps = {
   visible: boolean;
   palette: HomePalette;
-  avatar: Parameters<typeof Avatar>[0]['avatar'];
+  avatarId?: string | null;
+  currentUserId?: string | null;
+  fallbackGender?: Gender;
   username: string;
   planLabel: string;
   items: DrawerItem[];
@@ -18,7 +21,7 @@ type DrawerMenuProps = {
   onSelect: (item: DrawerItem) => void;
 };
 
-export function DrawerMenu({ visible, palette, avatar, username, planLabel, items, onClose, onSelect }: DrawerMenuProps) {
+export function DrawerMenu({ visible, palette, avatarId, currentUserId, fallbackGender, username, planLabel, items, onClose, onSelect }: DrawerMenuProps) {
   const { width } = useWindowDimensions();
   const translate = useRef(new Animated.Value(-320)).current;
   const [renderVisible, setRenderVisible] = useState(visible);
@@ -52,7 +55,15 @@ export function DrawerMenu({ visible, palette, avatar, username, planLabel, item
           <LinearGradient colors={['rgba(14, 17, 44, 0.98)', 'rgba(7, 9, 25, 0.98)']} style={[styles.drawer, { borderColor: palette.border }]}>
             <View style={styles.header}>
               <View style={styles.identityRow}>
-                <Avatar avatar={avatar} size={58} />
+                <UserAvatar
+                  avatarId={avatarId}
+                  avatarSourceType="current-profile"
+                  currentUserId={currentUserId}
+                  fallbackGender={fallbackGender}
+                  renderedUserId={currentUserId}
+                  screen="home"
+                  size={58}
+                />
                 <View style={styles.identityCopy}>
                   <Text numberOfLines={1} style={[styles.username, { color: palette.text }]}>
                     {username}

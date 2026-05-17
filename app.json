@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "newArchEnabled": true,
     "orientation": "portrait",
+    "icon": "./icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "derdimvar",
     "splash": {
@@ -16,6 +17,7 @@
     ],
     "ios": {
       "supportsTablet": false,
+      "icon": "./icon.png",
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.derdimvar.app",
       "buildNumber": "1",
@@ -27,7 +29,9 @@
       "bitcode": false
     },
     "android": {
+      "icon": "./icon.png",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon-adaptive-foreground.png",
         "backgroundColor": "#060816"
       },
       "package": "com.derdimvar.app",

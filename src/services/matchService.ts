@@ -1,10 +1,11 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-import { defaultProfile } from '../data/mockData';
+import { logSafeDebug } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { getCurrentUser } from './authService';
+import { getCurrentUser, resolveDisplayName } from './authService';
 import { MatchParticipantProfile, MatchmakingMode, MatchmakingQueueRow, MatchmakingState } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
+import { getDeterministicAvatarId, resolveAvatarId } from '../utils/avatarResolver';
 
 type MatchServiceError = {
   message: string;
@@ -16,11 +17,26 @@ type MatchServiceResult<T> = {
 };
 
 const MATCH_RETRY_MESSAGE = 'Eslesme sirasi yenilendi, tekrar deneniyor...';
-const MATCH_START_ERROR_MESSAGE = 'Eslesme su anda baslatilamadi. Lutfen tekrar dene.';
+const MATCH_START_ERROR_MESSAGE = 'Eşleşme başlatılamadı. Lütfen tekrar deneyin.';
+const MATCH_QUEUE_SELECT = 'id, user_id, mode, status, matched_with, match_room_id, room_id, ended_at, ended_by, created_at, updated_at';
+const PARTNER_PROFILE_SELECT = 'user_id, username, avatar_id, plan, is_online, last_seen, last_seen_at, presence_status, call_status';
+
+type MatchSessionCloseState = {
+  isClosed: boolean;
+  eventRoomId: string | null;
+  status: string | null;
+  rowCount: number;
+  activeRows: number;
+  terminalRows: number;
+};
 
 let activeQueue: MatchmakingQueueRow | null = null;
 let activePartnerProfile: MatchParticipantProfile | null = null;
 let matchChannel: RealtimeChannel | null = null;
+
+function logMatchEnd(message: string) {
+  logSafeDebug('[match-end]', message, { functionName: 'matchService' });
+}
 
 function getConfigError(): MatchServiceError {
   return {
@@ -31,6 +47,55 @@ function getConfigError(): MatchServiceError {
 
 function getOppositeMode(mode: MatchmakingMode): MatchmakingMode {
   return mode === 'derdim' ? 'derman' : 'derdim';
+}
+
+function getOnlineState(profile: any) {
+  const lastSeenAt = profile?.last_seen_at ?? profile?.last_seen ?? null;
+  return {
+    isOnline: Boolean(profile?.is_online) || (lastSeenAt ? Date.now() - new Date(lastSeenAt).getTime() < 90 * 1000 : false),
+    lastSeenAt,
+  };
+}
+
+function mapPartnerProfile(userId: string, profileData: any, fallbackProfile: MatchParticipantProfile): MatchParticipantProfile {
+  const username = resolveDisplayName({
+    username: profileData?.username,
+  });
+  const presence = getOnlineState(profileData);
+  const partnerAvatarId = resolveAvatarId(
+    typeof profileData?.avatar_id === 'string' && profileData.avatar_id.trim().length > 0
+      ? profileData.avatar_id.trim()
+      : fallbackProfile.avatarId,
+  );
+
+  if (__DEV__) {
+    logSafeDebug('[match] partner profile lookup', `userId:${userId} hasUsername:${username !== 'Anonim'}`);
+  }
+
+  return {
+    userId,
+    username,
+    avatarId: partnerAvatarId,
+    plan: profileData?.plan === 'plus' || profileData?.plan === 'vip' ? profileData.plan : 'free',
+    isOnline: presence.isOnline,
+    lastSeenAt: presence.lastSeenAt,
+  };
+}
+
+async function fetchVisiblePartnerProfile(userId: string) {
+  const { data, error } = await supabase.rpc('get_visible_profile_summaries', {
+    p_user_ids: [userId],
+  });
+
+  if (error) {
+    logSafeDebug('[match] partner profile rpc lookup skipped', error, {
+      functionName: 'fetchVisiblePartnerProfile',
+      rpc: 'get_visible_profile_summaries',
+    });
+    return null;
+  }
+
+  return Array.isArray(data) ? data[0] : null;
 }
 
 async function clearChannel() {
@@ -45,32 +110,44 @@ async function clearChannel() {
 
 async function fetchPartnerProfile(userId: string | null): Promise<MatchParticipantProfile | null> {
   if (!userId) {
+    logSafeDebug('[match] partner profile fallback', 'reason:missing-user-id');
     return null;
   }
 
   const fallbackProfile: MatchParticipantProfile = {
     userId,
-    username: `kullanici_${userId.slice(0, 6)}`,
-    avatarId: defaultProfile.avatarId,
+    username: resolveDisplayName({}),
+    avatarId: getDeterministicAvatarId(userId),
     plan: 'free',
   };
 
-  const { data, error } = await supabase
+  const { data: profileData, error } = await supabase
     .from('profiles')
-    .select('username, avatar_id, plan')
+    .select(PARTNER_PROFILE_SELECT)
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (error || !data) {
-    return fallbackProfile;
+  if (!error && profileData) {
+    return mapPartnerProfile(userId, profileData, fallbackProfile);
   }
 
-  return {
-    userId,
-    username: typeof data.username === 'string' && data.username.trim().length > 0 ? data.username.trim() : fallbackProfile.username,
-    avatarId: typeof data.avatar_id === 'string' && data.avatar_id.trim().length > 0 ? data.avatar_id.trim() : fallbackProfile.avatarId,
-    plan: data.plan === 'plus' || data.plan === 'vip' ? data.plan : 'free',
-  };
+  if (error) {
+    logSafeDebug('[match] partner profile direct lookup skipped', error, {
+      functionName: 'fetchPartnerProfile',
+      table: 'profiles',
+    });
+  } else {
+    logSafeDebug('[match] partner profile direct lookup empty', `userId:${userId}`);
+  }
+
+  const rpcProfile = await fetchVisiblePartnerProfile(userId);
+
+  if (rpcProfile) {
+    return mapPartnerProfile(userId, rpcProfile, fallbackProfile);
+  }
+
+  logSafeDebug('[match] partner profile fallback', `userId:${userId} reason:profile-not-visible-or-missing`);
+  return fallbackProfile;
 }
 
 async function buildMatchState(queue: MatchmakingQueueRow): Promise<MatchmakingState> {
@@ -107,7 +184,7 @@ async function refreshCurrentQueue(): Promise<MatchmakingQueueRow | null> {
 
   const { data } = await supabase
     .from('matchmaking_queue')
-    .select('id, user_id, mode, status, matched_with, created_at')
+    .select(MATCH_QUEUE_SELECT)
     .eq('id', activeQueue.id)
     .maybeSingle();
 
@@ -129,25 +206,25 @@ async function releasePartnerMatch(existingQueue: MatchmakingQueueRow | null) {
 
   const { error } = await supabase
     .from('matchmaking_queue')
-    .update({ status: 'waiting', matched_with: null })
+    .update({ status: 'waiting', matched_with: null, match_room_id: null, room_id: null, updated_at: new Date().toISOString() })
     .eq('user_id', existingQueue.matched_with)
     .eq('matched_with', existingQueue.user_id)
     .eq('status', 'matched');
 
   if (error) {
-    console.error('[match] releasePartnerMatch failed:', error.message);
+    logSafeDebug('[match] releasePartnerMatch skipped', error);
   }
 }
 
 async function fetchUserQueue(userId: string): Promise<MatchmakingQueueRow | null> {
   const { data, error } = await supabase
     .from('matchmaking_queue')
-    .select('id, user_id, mode, status, matched_with, created_at')
+    .select(MATCH_QUEUE_SELECT)
     .eq('user_id', userId)
     .maybeSingle();
 
   if (error) {
-    console.error('[match] fetchUserQueue failed:', error.message);
+    logSafeDebug('[match] fetchUserQueue skipped', error);
   }
 
   return data ?? null;
@@ -160,7 +237,7 @@ async function deleteUserQueue(userId: string) {
   const { error } = await supabase.from('matchmaking_queue').delete().eq('user_id', userId);
 
   if (error) {
-    console.error('[match] deleteUserQueue failed:', error.message);
+    logSafeDebug('[match] deleteUserQueue skipped', error);
     return { data: null, error: { message: MATCH_START_ERROR_MESSAGE } };
   }
 
@@ -170,6 +247,7 @@ async function deleteUserQueue(userId: string) {
 async function upsertUserQueue(userId: string, mode: MatchmakingMode): Promise<MatchServiceResult<MatchmakingQueueRow>> {
   const existingQueue = await fetchUserQueue(userId);
   await releasePartnerMatch(existingQueue);
+  const now = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('matchmaking_queue')
@@ -179,15 +257,16 @@ async function upsertUserQueue(userId: string, mode: MatchmakingMode): Promise<M
         mode,
         status: 'waiting',
         matched_with: null,
-        created_at: new Date().toISOString(),
+        match_room_id: null,
+        room_id: null,
+        updated_at: now,
       },
       { onConflict: 'user_id' },
     )
-    .select('id, user_id, mode, status, matched_with, created_at')
+    .select(MATCH_QUEUE_SELECT)
     .single();
 
   if (error) {
-    console.error('[match] upsertUserQueue failed:', error.message);
     return {
       data: null,
       error: {
@@ -260,7 +339,7 @@ export async function findMatch(): Promise<MatchServiceResult<MatchmakingState>>
   });
 
   if (error) {
-    console.error('[match] claim_matchmaking_pair failed:', error.message);
+    logSafeDebug('[match] claim_matchmaking_pair skipped', error);
     return { data: null, error: { message: getFriendlyErrorMessage(error, MATCH_START_ERROR_MESSAGE) } };
   }
 
@@ -412,11 +491,260 @@ export async function leaveQueue(): Promise<MatchServiceResult<true>> {
   const { error } = await supabase.from('matchmaking_queue').delete().eq('user_id', userIdResult.data);
 
   if (error) {
-    console.error('[match] leaveQueue delete failed:', error.message);
+    logSafeDebug('[match] leaveQueue delete skipped', error);
     return { data: null, error: { message: MATCH_START_ERROR_MESSAGE } };
   }
 
   return { data: true, error: null };
+}
+
+export async function endMatchSessionReliable(matchRoomId: string | null | undefined, source = 'user-ended-call'): Promise<MatchServiceResult<true>> {
+  const normalizedMatchRoomId = matchRoomId?.trim();
+
+  if (!isSupabaseConfigured || !normalizedMatchRoomId) {
+    return { data: true, error: null };
+  }
+
+  const userResult = await getCurrentUser();
+  const userId = userResult.data?.id ?? 'unknown';
+  logMatchEnd(`endRequested source:${source} roomId:${normalizedMatchRoomId} currentUserId:${userId}`);
+
+  const { error } = await supabase.rpc('end_match_session', {
+    p_match_room_id: normalizedMatchRoomId,
+  });
+  logMatchEnd(`endRpcSuccess:${!error} source:${source} roomId:${normalizedMatchRoomId}`);
+
+  if (error) {
+    logSafeDebug('[match] endMatchSession skipped', error, { functionName: 'endMatchSessionReliable', rpc: 'end_match_session', table: 'matchmaking_queue' });
+    const fallback = await supabase
+      .from('matchmaking_queue')
+      .update({ status: 'ended', ended_at: new Date().toISOString(), ended_by: userResult.data?.id ?? null, updated_at: new Date().toISOString() })
+      .or(`match_room_id.eq.${normalizedMatchRoomId},room_id.eq.${normalizedMatchRoomId}`)
+      .in('status', ['matched', 'waiting']);
+    logMatchEnd(`endFallbackSuccess:${!fallback.error} roomId:${normalizedMatchRoomId}`);
+
+    if (fallback.error) {
+      logSafeDebug('[match] endMatchSession fallback skipped', fallback.error, { functionName: 'endMatchSessionReliable', table: 'matchmaking_queue' });
+      return { data: null, error: { message: 'Görüşme kapatılamadı, lütfen tekrar deneyin.' } };
+    }
+  }
+
+  if (activeQueue?.match_room_id === normalizedMatchRoomId || activeQueue?.room_id === normalizedMatchRoomId) {
+    activeQueue = {
+      ...activeQueue,
+      status: 'ended',
+      matched_with: null,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  return { data: true, error: null };
+}
+
+export async function isMatchSessionClosed(matchRoomId: string | null | undefined): Promise<MatchServiceResult<boolean>> {
+  const stateResult = await getMatchSessionCloseState(matchRoomId);
+
+  if (stateResult.error || !stateResult.data) {
+    return { data: stateResult.data?.isClosed ?? null, error: stateResult.error };
+  }
+
+  return { data: stateResult.data.isClosed, error: null };
+}
+
+export async function getMatchSessionCloseState(matchRoomId: string | null | undefined): Promise<MatchServiceResult<MatchSessionCloseState>> {
+  const normalizedMatchRoomId = matchRoomId?.trim();
+
+  if (!isSupabaseConfigured || !normalizedMatchRoomId) {
+    return {
+      data: {
+        isClosed: false,
+        eventRoomId: null,
+        status: null,
+        rowCount: 0,
+        activeRows: 0,
+        terminalRows: 0,
+      },
+      error: null,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('matchmaking_queue')
+    .select('status, match_room_id, room_id, ended_at, ended_by')
+    .or(`match_room_id.eq.${normalizedMatchRoomId},room_id.eq.${normalizedMatchRoomId}`)
+    .limit(2);
+
+  if (error) {
+    logSafeDebug('[match] poll session status skipped', error, { functionName: 'isMatchSessionClosed', table: 'matchmaking_queue' });
+    return { data: null, error: { message: 'Görüşme durumu kontrol edilemedi.' } };
+  }
+
+  const rows = data ?? [];
+
+  if (rows.length === 0) {
+    return {
+      data: {
+        isClosed: false,
+        eventRoomId: normalizedMatchRoomId,
+        status: 'missing',
+        rowCount: 0,
+        activeRows: 0,
+        terminalRows: 0,
+      },
+      error: null,
+    };
+  }
+
+  const hasActive = rows.some((row) => row.status === 'matched' || row.status === 'waiting');
+  const terminalRows = rows.filter((row) => row.status === 'ended' || row.status === 'cancelled' || row.status === 'expired');
+  const firstTerminalRow = terminalRows[0] ?? rows[0];
+  const eventRoomId = firstTerminalRow?.match_room_id ?? firstTerminalRow?.room_id ?? normalizedMatchRoomId;
+  const status = terminalRows.length > 0 && terminalRows.length !== rows.length
+    ? 'mixed'
+    : firstTerminalRow?.status ?? null;
+
+  return {
+    data: {
+      isClosed: rows.length > 0 && terminalRows.length === rows.length && !hasActive,
+      eventRoomId,
+      status,
+      rowCount: rows.length,
+      activeRows: rows.length - terminalRows.length,
+      terminalRows: terminalRows.length,
+    },
+    error: null,
+  };
+}
+
+export function listenForMatchSessionEndReliable(
+  matchRoomId: string | null | undefined,
+  onEnd: (event?: { eventRoomId: string | null; status: string | null }) => void,
+): MatchServiceResult<() => Promise<void>> {
+  const normalizedMatchRoomId = matchRoomId?.trim();
+
+  if (!isSupabaseConfigured || !normalizedMatchRoomId) {
+    return { data: null, error: null };
+  }
+
+  let resolved = false;
+  const channel = supabase.channel(`match-session:${normalizedMatchRoomId}`);
+  const isTargetRoom = (row: MatchmakingQueueRow | undefined) =>
+    row?.match_room_id === normalizedMatchRoomId || row?.room_id === normalizedMatchRoomId;
+
+  channel.on(
+    'postgres_changes',
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'matchmaking_queue',
+    },
+    (payload) => {
+      const nextRow = payload.new as MatchmakingQueueRow | undefined;
+      const prevRow = payload.old as MatchmakingQueueRow | undefined;
+
+      if (resolved || (!isTargetRoom(nextRow) && !isTargetRoom(prevRow))) {
+        return;
+      }
+
+      if (nextRow?.status === 'ended' || nextRow?.status === 'cancelled' || nextRow?.status === 'expired') {
+        resolved = true;
+        onEnd({
+          eventRoomId: nextRow.match_room_id ?? nextRow.room_id ?? prevRow?.match_room_id ?? prevRow?.room_id ?? normalizedMatchRoomId,
+          status: nextRow.status,
+        });
+      }
+    },
+  );
+
+  channel.subscribe();
+
+  return {
+    data: async () => {
+      resolved = true;
+      await supabase.removeChannel(channel);
+    },
+    error: null,
+  };
+}
+
+export async function endMatchSession(matchRoomId: string | null | undefined): Promise<MatchServiceResult<true>> {
+  if (!isSupabaseConfigured || !matchRoomId?.trim()) {
+    return { data: true, error: null };
+  }
+
+  const { error } = await supabase.rpc('end_match_session', {
+    p_match_room_id: matchRoomId,
+  });
+
+  if (error) {
+    logSafeDebug('[match] endMatchSession skipped', error, { functionName: 'endMatchSession', rpc: 'end_match_session', table: 'matchmaking_queue' });
+    return { data: null, error: { message: 'Görüşme kapatılamadı, lütfen tekrar deneyin.' } };
+  }
+
+  if (activeQueue?.match_room_id === matchRoomId || activeQueue?.room_id === matchRoomId) {
+    activeQueue = {
+      ...activeQueue,
+      status: 'ended',
+      matched_with: null,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  return { data: true, error: null };
+}
+
+export function listenForMatchSessionEnd(
+  matchRoomId: string | null | undefined,
+  onEnd: () => void,
+): MatchServiceResult<() => Promise<void>> {
+  if (!isSupabaseConfigured || !matchRoomId?.trim()) {
+    return { data: null, error: null };
+  }
+
+  let resolved = false;
+  const channel = supabase.channel(`match-session:${matchRoomId}`);
+  const handleRow = (row: MatchmakingQueueRow | undefined) => {
+    if (!row || resolved) {
+      return;
+    }
+
+    if (row.status === 'ended' || row.status === 'cancelled' || row.status === 'expired') {
+      resolved = true;
+      onEnd();
+    }
+  };
+
+  channel.on(
+    'postgres_changes',
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'matchmaking_queue',
+      filter: `match_room_id=eq.${matchRoomId}`,
+    },
+    (payload) => handleRow(payload.new as MatchmakingQueueRow | undefined),
+  );
+
+  channel.on(
+    'postgres_changes',
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'matchmaking_queue',
+      filter: `room_id=eq.${matchRoomId}`,
+    },
+    (payload) => handleRow(payload.new as MatchmakingQueueRow | undefined),
+  );
+
+  channel.subscribe();
+
+  return {
+    data: async () => {
+      resolved = true;
+      await supabase.removeChannel(channel);
+    },
+    error: null,
+  };
 }
 
 export function getActiveMatch(): MatchmakingState | null {

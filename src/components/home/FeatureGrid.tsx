@@ -8,31 +8,32 @@ type FeatureGridProps = {
   items: FeatureItem[];
   palette: HomePalette;
   compact?: boolean;
+  dense?: boolean;
   cardHeight?: number;
   onSelect: (item: FeatureItem) => void;
 };
 
-export function FeatureGrid({ items, palette, compact = false, cardHeight, onSelect }: FeatureGridProps) {
+export function FeatureGrid({ items, palette, compact = false, dense = false, cardHeight, onSelect }: FeatureGridProps) {
   return (
     <View style={styles.grid}>
       {items.map((item) => (
         <Pressable key={item.key} onPress={() => onSelect(item)} style={({ pressed }) => [styles.cellWrap, { transform: [{ scale: pressed ? 0.988 : 1 }] }]}>
-          <View style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: item.accent }, compact && styles.cardCompact, cardHeight ? { height: cardHeight } : null]}>
+          <View style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: item.accent }, compact && styles.cardCompact, dense && styles.cardDense, cardHeight ? { height: cardHeight, minHeight: cardHeight } : null]}>
             <View style={[styles.glow, { backgroundColor: item.glow }]} />
-            <View style={[styles.iconWrap, { borderColor: `${item.accent}55`, backgroundColor: `${item.accent}18` }]}>
-              <Ionicons color={item.accent} name={item.icon} size={compact ? 24 : 28} />
+            <View style={[styles.iconWrap, dense && styles.iconWrapDense, { borderColor: `${item.accent}55`, backgroundColor: `${item.accent}18` }]}>
+              <Ionicons color={item.accent} name={item.icon} size={dense ? 18 : compact ? 24 : 28} />
             </View>
 
             <View style={styles.copy}>
-              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.title, { color: palette.text }]}>
+              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.title, dense && styles.titleDense, { color: palette.text }]}>
                 {item.title}
               </Text>
-              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={2} style={[styles.subtitle, { color: item.accent }]}>
+              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={dense ? 1 : 2} style={[styles.subtitle, dense && styles.subtitleDense, { color: item.accent }]}>
                 {item.subtitle}
               </Text>
             </View>
 
-            <Ionicons color={palette.text} name="chevron-forward" size={compact ? 16 : 18} />
+            <Ionicons color={palette.text} name="chevron-forward" size={dense ? 14 : compact ? 16 : 18} />
           </View>
         </Pressable>
       ))}
@@ -51,7 +52,7 @@ const styles = StyleSheet.create({
     width: '48%',
   },
   card: {
-    minHeight: 90,
+    minHeight: 0,
     borderRadius: 24,
     borderWidth: 1,
     paddingHorizontal: 14,
@@ -62,10 +63,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardCompact: {
-    minHeight: 82,
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 10,
+  },
+  cardDense: {
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    gap: 7,
   },
   glow: {
     position: 'absolute',
@@ -84,6 +89,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
+  iconWrapDense: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
   copy: {
     flex: 1,
     minWidth: 0,
@@ -93,9 +103,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
+  titleDense: {
+    fontSize: 12,
+  },
   subtitle: {
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '500',
+  },
+  subtitleDense: {
+    fontSize: 9,
+    lineHeight: 11,
   },
 });

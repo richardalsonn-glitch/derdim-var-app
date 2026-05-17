@@ -2,13 +2,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Avatar } from '../Avatar';
 import { radius } from '../../constants/theme';
+import { Gender } from '../../types';
+import { UserAvatar } from '../UserAvatar';
 import { HomePalette, ProfileCardData } from './types';
 
 type ProfileCardProps = {
   data: ProfileCardData;
-  avatar: Parameters<typeof Avatar>[0]['avatar'];
+  avatarId?: string | null;
+  currentUserId?: string | null;
+  fallbackGender?: Gender;
   palette: HomePalette;
   compact?: boolean;
   onPress: () => void;
@@ -26,7 +29,7 @@ function getPlanColors(plan: ProfileCardData['plan']) {
   return ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'] as const;
 }
 
-export function ProfileCard({ data, avatar, palette, compact = false, onPress }: ProfileCardProps) {
+export function ProfileCard({ data, avatarId, currentUserId, fallbackGender, palette, compact = false, onPress }: ProfileCardProps) {
   const avatarSize = compact ? 58 : 66;
 
   return (
@@ -35,7 +38,15 @@ export function ProfileCard({ data, avatar, palette, compact = false, onPress }:
         <View style={[styles.avatarRail, { width: avatarSize + 12 }]}>
           <LinearGradient colors={['#FF4FB9', '#7B58FF', '#55C8FF']} style={[styles.avatarRing, { width: avatarSize + 8, height: avatarSize + 8, borderRadius: (avatarSize + 8) / 2 }]}>
             <View style={[styles.avatarCore, { borderRadius: avatarSize / 2 }]}>
-              <Avatar avatar={avatar} size={avatarSize} />
+              <UserAvatar
+                avatarId={avatarId}
+                avatarSourceType="current-profile"
+                currentUserId={currentUserId}
+                fallbackGender={fallbackGender}
+                renderedUserId={currentUserId}
+                screen="home"
+                size={avatarSize}
+              />
             </View>
           </LinearGradient>
           <View style={styles.onlineDot} />
@@ -113,7 +124,7 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 112,
+    minHeight: 0,
     borderRadius: 28,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -123,7 +134,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
   },
   cardCompact: {
-    minHeight: 102,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },

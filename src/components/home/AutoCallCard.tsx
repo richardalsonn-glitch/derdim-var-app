@@ -9,24 +9,25 @@ type AutoCallCardProps = {
   enabled: boolean;
   counterLabel: string;
   compact?: boolean;
+  dense?: boolean;
   palette: HomePalette;
   onToggle: () => void;
 };
 
-export function AutoCallCard({ enabled, counterLabel, compact = false, palette, onToggle }: AutoCallCardProps) {
+export function AutoCallCard({ enabled, counterLabel, compact = false, dense = false, palette, onToggle }: AutoCallCardProps) {
   return (
-    <View style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.border }, compact && styles.cardCompact]}>
-      <View style={styles.iconWrap}>
+    <View style={[styles.card, { backgroundColor: palette.surfaceStrong, borderColor: palette.border }, compact && styles.cardCompact, dense && styles.cardDense]}>
+      <View style={[styles.iconWrap, dense && styles.iconWrapDense]}>
         <LinearGradient colors={['rgba(132, 79, 255, 0.2)', 'rgba(255, 91, 178, 0.12)']} style={styles.iconGradient}>
-          <Ionicons color={palette.text} name="call" size={compact ? 20 : 22} />
+          <Ionicons color={palette.text} name="call" size={dense ? 17 : compact ? 20 : 22} />
         </LinearGradient>
       </View>
 
       <View style={styles.copy}>
-        <Text adjustsFontSizeToFit minimumFontScale={0.84} numberOfLines={1} style={[styles.title, { color: palette.text }]}>
+        <Text adjustsFontSizeToFit minimumFontScale={0.84} numberOfLines={1} style={[styles.title, dense && styles.titleDense, { color: palette.text }]}>
           Otomatik çağrı al
         </Text>
-        <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={2} style={[styles.subtitle, { color: palette.muted }]}>
+        <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={dense ? 1 : 2} style={[styles.subtitle, dense && styles.subtitleDense, { color: palette.muted }]}>
           45 saniye işlem yapmazsan seni uygun bir ses odasına bağlarız.
         </Text>
       </View>
@@ -35,7 +36,7 @@ export function AutoCallCard({ enabled, counterLabel, compact = false, palette, 
         <Pressable onPress={onToggle} style={[styles.switch, enabled && styles.switchActive, { borderColor: enabled ? 'rgba(132, 79, 255, 0.5)' : palette.border }]}>
           <View style={[styles.knob, enabled && styles.knobActive]} />
         </Pressable>
-        <Text numberOfLines={1} style={[styles.counter, { color: palette.purple }]}>
+        <Text numberOfLines={1} style={[styles.counter, dense && styles.counterDense, { color: palette.purple }]}>
           {counterLabel}
         </Text>
       </View>
@@ -58,6 +59,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 10,
   },
+  cardDense: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    gap: 8,
+  },
   iconWrap: {
     width: 52,
     height: 52,
@@ -65,6 +71,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
+  },
+  iconWrapDense: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   iconGradient: {
     flex: 1,
@@ -80,9 +91,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
+  titleDense: {
+    fontSize: 13,
+  },
   subtitle: {
     fontSize: 11,
     lineHeight: 15,
+  },
+  subtitleDense: {
+    fontSize: 10,
+    lineHeight: 12,
   },
   statusRail: {
     alignItems: 'flex-end',
@@ -114,5 +132,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0.3,
+  },
+  counterDense: {
+    fontSize: 14,
   },
 });

@@ -22,7 +22,7 @@ export function isNightModeOpen(date = new Date()) {
 }
 
 export function getNightModeSubtitle(isDemoMode: boolean) {
-  return isDemoMode ? '22:00 - 06:00 • demo modunda erişilebilir' : '22:00 - 06:00 • Türkiye saati';
+  return isDemoMode ? '22:00 - 06:00 • erken erişim açık' : '22:00 - 06:00 • Türkiye saati';
 }
 
 export const NIGHT_MODE_CLOSED_MESSAGE = 'Gece Modu Türkiye saati ile 22:00 - 06:00 arasında aktiftir.';

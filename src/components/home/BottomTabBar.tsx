@@ -8,6 +8,7 @@ export type BottomTabItem = {
   key: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  badgeCount?: number;
 };
 
 type BottomTabBarProps = {
@@ -27,6 +28,13 @@ export function BottomTabBar({ activeKey, items, palette, compact = false, onSel
         return (
           <Pressable key={item.key} onPress={() => onSelect(item)} style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}>
             <Ionicons color={active ? palette.pink : palette.tabInactive} name={item.icon} size={compact ? 21 : 23} />
+            {item.badgeCount && item.badgeCount > 0 ? (
+              <View style={[styles.badge, { backgroundColor: palette.pink }]}>
+                <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={1} style={styles.badgeText}>
+                  {item.badgeCount > 99 ? '99+' : item.badgeCount}
+                </Text>
+              </View>
+            ) : null}
             <Text numberOfLines={1} style={[styles.label, { color: active ? palette.pink : palette.tabInactive }, compact && styles.labelCompact]}>
               {item.label}
             </Text>
@@ -62,6 +70,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     minWidth: 0,
+    position: 'relative',
   },
   tabPressed: {
     opacity: 0.82,
@@ -72,5 +81,23 @@ const styles = StyleSheet.create({
   },
   labelCompact: {
     fontSize: 10,
+  },
+  badge: {
+    position: 'absolute',
+    top: 3,
+    right: '22%',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
   },
 });

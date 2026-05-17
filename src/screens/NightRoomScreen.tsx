@@ -1,14 +1,14 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, BackHandler, ImageBackground, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar } from '../components/Avatar';
 import { NoticeModal } from '../components/NoticeModal';
+import { UserAvatar } from '../components/UserAvatar';
 import { isLiveKitEnabled } from '../config/features';
 import { colors, gradients, radius, spacing } from '../constants/theme';
-import { getAvatarById } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { requestMicrophonePermission } from '../services/permissionsService';
 import {
@@ -24,6 +24,7 @@ import {
   subscribeToNightVoiceRoom,
 } from '../services/voiceRoomService';
 import { VoiceRoom, VoiceRoomJoinRequest, VoiceRoomMember } from '../types';
+import { getScreenLayout } from '../utils/responsive';
 
 const nightRoomBackground = require('../../assets/images/night-room-background.png');
 
@@ -121,6 +122,8 @@ function RoomBackground({ children }: { children: ReactNode }) {
 export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom'>) {
   const { roomId } = route.params;
   const { height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const screenLayout = getScreenLayout({ width, height }, insets);
   const glow = useRef(new Animated.Value(0.72)).current;
   const [room, setRoom] = useState<VoiceRoom | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -132,21 +135,23 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   const [requestModalVisible, setRequestModalVisible] = useState(false);
   const [draftRoomName, setDraftRoomName] = useState('');
   const [lastPaidWarningKey, setLastPaidWarningKey] = useState<string | null>(null);
+  const controlledExitRef = useRef(false);
 
-  const compact = height < 780;
-  const tiny = height < 700;
-  const horizontalPadding = width < 380 ? 14 : 20;
+  const screen = screenLayout;
+  const compact = screen.isCompactPhone || height <= 844;
+  const tiny = height < 720;
+  const horizontalPadding = screenLayout.horizontalPadding;
   const contentGap = tiny ? 6 : compact ? 8 : 10;
   const layout = useMemo<LayoutMetrics>(
     () => ({
       avatarSize: tiny ? 38 : compact ? 44 : 50,
       compact,
-      sceneHeight: clamp(height * (tiny ? 0.37 : compact ? 0.39 : 0.42), tiny ? 262 : 302, compact ? 346 : 392),
+      sceneHeight: clamp((height - screenLayout.contentTopPadding - screenLayout.contentBottomPadding) * (tiny ? 0.37 : compact ? 0.39 : 0.42), tiny ? 262 : 302, compact ? 346 : 392),
       seatHeight: tiny ? 82 : compact ? 94 : 106,
-      seatWidth: clamp((width - horizontalPadding * 2 - 28) / 2, tiny ? 94 : 104, compact ? 116 : 128),
+      seatWidth: clamp((Math.min(width, screenLayout.contentMaxWidth) - horizontalPadding * 2 - 28) / 2, tiny ? 94 : 104, compact ? 116 : 128),
       tableSize: tiny ? 102 : compact ? 116 : 132,
     }),
-    [compact, height, horizontalPadding, tiny, width],
+    [compact, height, horizontalPadding, screenLayout, tiny, width],
   );
 
   const currentMembership = room?.members.find((member) => member.userId === currentUserId) ?? null;
@@ -178,6 +183,29 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   useEffect(() => {
     void loadRoom();
   }, [loadRoom]);
+
+  useFocusEffect(
+    useCallback(() => {
+      navigation.setOptions({
+        gestureEnabled: false,
+        headerBackVisible: false,
+      });
+
+      const hardwareBackSubscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+      const beforeRemoveSubscription = navigation.addListener('beforeRemove', (event) => {
+        if (controlledExitRef.current) {
+          return;
+        }
+
+        event.preventDefault();
+      });
+
+      return () => {
+        hardwareBackSubscription.remove();
+        beforeRemoveSubscription();
+      };
+    }, [navigation]),
+  );
 
   useEffect(() => subscribeToNightVoiceRoom(roomId, () => void loadRoom(true)), [loadRoom, roomId]);
 
@@ -220,6 +248,7 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
     if (remainingMs <= 0) {
       void expireVoiceRoom(room.id).then(() => {
         setModal({ title: 'Oda kapandı', message: 'Oda süresi doldu.' });
+        controlledExitRef.current = true;
         navigation.goBack();
       });
       return;
@@ -324,6 +353,43 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
     }
   }
 
+  async function handleLeaveRoom() {
+    if (!room || !currentUserId || busy) {
+      return;
+    }
+
+    const leavingRoomId = room.id;
+    setBusy(true);
+    setRoom((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextMembers = current.members.filter((member) => member.userId !== currentUserId);
+
+      return {
+        ...current,
+        members: nextMembers,
+        currentCount: nextMembers.length,
+        ownerId: current.ownerId === currentUserId ? null : current.ownerId,
+        name: nextMembers.length === 0 ? 'Şu anda bu oda müsaittir' : current.name,
+        status: nextMembers.length >= current.capacity ? 'full' : 'open',
+      };
+    });
+
+    const result = await leaveVoiceRoom(leavingRoomId);
+    setBusy(false);
+
+    if (result.error) {
+      setModal({ title: 'İşlem tamamlanamadı', message: result.error.message });
+      await loadRoom(true);
+      return;
+    }
+
+    controlledExitRef.current = true;
+    navigation.goBack();
+  }
+
   function renderSeat(member: VoiceRoomMember | null, seatIndex: number) {
     const isCurrentUser = Boolean(member && member.userId === currentUserId);
     const isActive = Boolean(member && (member.micEnabled || member.speakerEnabled));
@@ -360,7 +426,15 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
                 </View>
               ) : null}
               <View style={styles.avatarRing}>
-                <Avatar avatar={getAvatarById(member.avatarId)} size={layout.avatarSize} />
+                <UserAvatar
+                  avatarId={member.avatarId}
+                  avatarSourceType="peer-profile"
+                  currentUserId={currentUserId}
+                  renderedUserId={member.userId}
+                  screen="night-room"
+                  size={layout.avatarSize}
+                  username={member.username}
+                />
               </View>
               <Text numberOfLines={1} style={[styles.seatName, layout.compact && styles.compactSeatName]}>{isCurrentUser ? 'Sen' : member.username}</Text>
               <View style={[styles.memberStatusBadge, isActive && !controlsLocked && styles.activeStatusBadge]}>
@@ -396,7 +470,15 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
     return (
       <View key={request.id} style={styles.requestRow}>
         <View style={styles.requestUser}>
-          <Avatar avatar={getAvatarById(request.requesterAvatarId)} size={36} />
+          <UserAvatar
+            avatarId={request.requesterAvatarId}
+            avatarSourceType="peer-profile"
+            currentUserId={currentUserId}
+            renderedUserId={request.requesterId}
+            screen="night-room"
+            size={36}
+            username={request.requesterUsername}
+          />
           <Text style={styles.requestName}>{request.requesterUsername}</Text>
         </View>
         <View style={styles.requestActions}>
@@ -414,8 +496,8 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   if (loading) {
     return (
       <RoomBackground>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.loadingBody}>
+        <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+          <View style={[styles.loadingBody, { paddingBottom: screenLayout.contentBottomPadding, paddingTop: screenLayout.contentTopPadding }]}>
             <ActivityIndicator color={colors.cyan} />
             <Text style={styles.loadingText}>Oda hazırlanıyor...</Text>
           </View>
@@ -427,9 +509,9 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
   if (!room) {
     return (
       <RoomBackground>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding }]}>
-            <Header compact={compact} onBack={() => navigation.goBack()} roomType="Gece Modu Odası" />
+        <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+          <View style={[styles.content, { gap: contentGap, paddingBottom: screenLayout.contentBottomPadding, paddingHorizontal: horizontalPadding, paddingTop: screenLayout.contentTopPadding }]}>
+            <Header compact={compact} roomType="Gece Modu Odası" />
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>Oda şu anda kullanılamıyor.</Text>
             </View>
@@ -447,9 +529,9 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
     <RoomBackground>
       <View pointerEvents="none" style={[styles.pageGlow, styles.pageGlowTop]} />
       <View pointerEvents="none" style={[styles.pageGlow, styles.pageGlowBottom]} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.content, { gap: contentGap, paddingHorizontal: horizontalPadding }]}>
-          <Header compact={compact} onBack={() => navigation.goBack()} roomType={room.pricingType === 'paid' ? 'Ücretli oda' : 'Ücretsiz oda'} />
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+        <View style={[styles.content, { gap: contentGap, paddingBottom: screenLayout.contentBottomPadding, paddingHorizontal: horizontalPadding, paddingTop: screenLayout.contentTopPadding }]}>
+          <Header compact={compact} roomType={room.pricingType === 'paid' ? 'Ücretli oda' : 'Ücretsiz oda'} />
 
           <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(153,70,255,0.08)', 'rgba(255,255,255,0.035)']} style={[styles.infoPanel, compact && styles.compactInfoPanel]}>
             <View style={styles.infoIcon}>
@@ -535,7 +617,7 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
               <ActionTile icon="add-circle-outline" onPress={handleTakeSeat} title="Boş Koltuğa Otur" primary />
             ) : null}
             {currentMembership ? (
-              <ActionTile disabled={busy} icon="exit-outline" onPress={() => void runRoomAction(() => leaveVoiceRoom(room.id)).then(() => navigation.goBack())} title="Odadan Çık" />
+              <ActionTile disabled={busy} icon="exit-outline" onPress={() => void handleLeaveRoom()} title="Odadan Çık" />
             ) : null}
             {canRenameRoom ? (
               <ActionTile
@@ -599,16 +681,12 @@ export function NightRoomScreen({ navigation, route }: AppScreenProps<'NightRoom
 
 type HeaderProps = {
   compact: boolean;
-  onBack: () => void;
   roomType: string;
 };
 
-function Header({ compact, onBack, roomType }: HeaderProps) {
+function Header({ compact, roomType }: HeaderProps) {
   return (
     <View style={[styles.header, compact && styles.compactHeader]}>
-      <Pressable onPress={onBack} style={[styles.backButton, compact && styles.compactBackButton]}>
-        <Ionicons color={colors.text} name="chevron-back" size={compact ? 25 : 30} />
-      </Pressable>
       <View style={styles.headerCopy}>
         <Text style={[styles.headerTitle, compact && styles.compactHeaderTitle]}>Gece Modu Odası</Text>
         <Text style={styles.headerSubtitle}>{roomType}</Text>
@@ -668,9 +746,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    alignSelf: 'center',
     flex: 1,
-    paddingBottom: 8,
-    paddingTop: 6,
+    maxWidth: 720,
+    width: '100%',
   },
   pageGlow: {
     borderRadius: 999,

@@ -1,7 +1,9 @@
 import { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, spacing } from '../constants/theme';
+import { getContentMaxWidth, getHorizontalPadding, responsiveFont, responsiveSpacing } from '../utils/responsive';
 import { GlassCard } from './GlassCard';
 import { GradientButton } from './GradientButton';
 
@@ -21,26 +23,47 @@ type NoticeModalProps = {
 };
 
 export function NoticeModal({ visible, title, message, actions, onClose, children }: NoticeModalProps) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const horizontalPadding = getHorizontalPadding(width);
+  const maxWidth = getContentMaxWidth(width);
+
   return (
     <Modal animationType="fade" transparent visible={visible}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[
+          styles.backdrop,
+          {
+            paddingBottom: insets.bottom + responsiveSpacing(spacing.lg, width),
+            paddingHorizontal: horizontalPadding,
+            paddingTop: insets.top + responsiveSpacing(spacing.lg, width),
+          },
+        ]}
+      >
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
-        <GlassCard style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-          {children}
-          <View style={styles.actions}>
-            {actions.map((action) => (
-              <GradientButton
-                key={action.label}
-                onPress={action.onPress}
-                title={action.label}
-                variant={action.variant ?? 'primary'}
-              />
-            ))}
-          </View>
-        </GlassCard>
-      </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <GlassCard style={[styles.card, { maxWidth }]}>
+            <Text style={[styles.title, { fontSize: responsiveFont(24, width) }]}>{title}</Text>
+            {message ? <Text style={styles.message}>{message}</Text> : null}
+            {children}
+            <View style={styles.actions}>
+              {actions.map((action) => (
+                <GradientButton
+                  key={action.label}
+                  onPress={action.onPress}
+                  title={action.label}
+                  variant={action.variant ?? 'primary'}
+                />
+              ))}
+            </View>
+          </GlassCard>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -48,16 +71,19 @@ export function NoticeModal({ visible, title, message, actions, onClose, childre
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
     backgroundColor: 'rgba(4, 6, 20, 0.76)',
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   card: {
+    width: '100%',
+    alignSelf: 'center',
     gap: spacing.md,
   },
   title: {
     color: colors.text,
-    fontSize: 24,
     fontWeight: '800',
   },
   message: {

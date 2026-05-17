@@ -1,35 +1,86 @@
 import { PropsWithChildren } from 'react';
-import { ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { ImageBackground, ImageSourcePropType, ScrollView, StyleProp, StyleSheet, View, ViewStyle, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, gradients, layout, spacing } from '../constants/theme';
+import { colors, gradients } from '../constants/theme';
+import { ScreenInsetMode, getScreenLayout } from '../utils/responsive';
 
 type PremiumScreenProps = PropsWithChildren<{
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  topInsetMode?: ScreenInsetMode;
+  bottomInsetMode?: ScreenInsetMode;
+  backgroundImage?: ImageSourcePropType;
 }>;
 
-export function PremiumScreen({ children, scroll = true, contentStyle }: PremiumScreenProps) {
+export function PremiumScreen({
+  children,
+  scroll = true,
+  contentStyle,
+  topInsetMode = 'default',
+  bottomInsetMode = 'default',
+  backgroundImage,
+}: PremiumScreenProps) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const screenLayout = getScreenLayout({ width, height }, insets, { topInsetMode, bottomInsetMode });
+
   const content = scroll ? (
     <ScrollView
-      contentContainerStyle={[styles.scrollContent, contentStyle]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          gap: screenLayout.pageGap,
+          paddingBottom: screenLayout.contentBottomPadding,
+          paddingHorizontal: screenLayout.horizontalPadding,
+          paddingTop: screenLayout.contentTopPadding,
+        },
+        contentStyle,
+      ]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.staticContent, contentStyle]}>{children}</View>
+    <View
+      style={[
+        styles.staticContent,
+        {
+          paddingBottom: screenLayout.contentBottomPadding,
+          paddingHorizontal: screenLayout.horizontalPadding,
+          paddingTop: screenLayout.contentTopPadding,
+        },
+        contentStyle,
+      ]}
+    >
+      {children}
+    </View>
   );
+
+  const screenContent = (
+    <>
+      <View pointerEvents="none" style={[styles.orb, styles.orbTop]} />
+      <View pointerEvents="none" style={[styles.orb, styles.orbBottom]} />
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+        <View style={[styles.centerColumn, { maxWidth: screenLayout.contentMaxWidth }]}>{content}</View>
+      </SafeAreaView>
+    </>
+  );
+
+  if (backgroundImage) {
+    return (
+      <ImageBackground resizeMode="cover" source={backgroundImage} style={styles.container}>
+        <View pointerEvents="none" style={styles.imageOverlay} />
+        {screenContent}
+      </ImageBackground>
+    );
+  }
 
   return (
     <LinearGradient colors={[...gradients.background]} style={styles.container}>
-      <View pointerEvents="none" style={[styles.orb, styles.orbTop]} />
-      <View pointerEvents="none" style={[styles.orb, styles.orbBottom]} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerColumn}>{content}</View>
-      </SafeAreaView>
+      {screenContent}
     </LinearGradient>
   );
 }
@@ -46,19 +97,16 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     alignSelf: 'center',
-    maxWidth: layout.maxWidth,
+  },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(4, 6, 20, 0.38)',
   },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 120,
-    gap: spacing.md,
+    flexGrow: 1,
   },
   staticContent: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
   },
   orb: {
     position: 'absolute',

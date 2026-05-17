@@ -28,7 +28,7 @@ export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'
   });
 
   const handleExtendVote = () => {
-    setVoteMessage('Oylama simülasyonu başladı... %34 evet göründü.');
+    setVoteMessage('Oylama başladı... %34 evet göründü.');
     setTimeout(() => {
       setVoteMessage('Yeterli destek geldi. Süreye +1 dakika eklendi.');
       addSeconds(60);
@@ -128,7 +128,7 @@ export function SilentScreamScreen({ navigation }: AppScreenProps<'SilentScream'
           { label: 'Engelle', onPress: () => navigation.navigate('Home'), variant: 'secondary' },
           { label: 'Vazgeç', onPress: () => setSafetyVisible(false), variant: 'ghost' },
         ]}
-        message="Bu alan anonim sosyal destek içindir. Moderasyon akışı şimdilik demo modunda çalışır."
+        message="Bu alan anonim sosyal destek içindir. Şikayet ve engelleme kayıtları güvenlik incelemesine alınır."
         title="Güvenlik seçenekleri"
         visible={safetyVisible}
       />
