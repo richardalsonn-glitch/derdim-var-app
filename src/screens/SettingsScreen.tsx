@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { GlassCard } from '../components/GlassCard';
@@ -54,6 +54,8 @@ const supportTypes = [
 
 export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
   const { updateProfile } = useAppState();
+  const { width, height } = useWindowDimensions();
+  const compact = width <= 390 || height <= 844;
   const [selectedItem, setSelectedItem] = useState<InfoItem | null>(null);
   const [confirmAction, setConfirmAction] = useState<'freeze' | 'delete' | null>(null);
   const [pending, setPending] = useState(false);
@@ -193,14 +195,14 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
         title="Şikayet Et / Bize Ulaş"
         visible={supportVisible}
       >
-        <View style={styles.typeGrid}>
+         <View style={[styles.typeGrid, compact && styles.typeGridCompact]}>
           {supportTypes.map((type, index) => (
             <Pressable
               key={type.label}
               onPress={() => setSupportTypeIndex(index)}
-              style={[styles.typeChip, supportTypeIndex === index && styles.typeChipActive]}
+               style={[styles.typeChip, compact && styles.typeChipCompact, supportTypeIndex === index && styles.typeChipActive]}
             >
-              <Text style={[styles.typeText, supportTypeIndex === index && styles.typeTextActive]}>{type.label}</Text>
+               <Text style={[styles.typeText, compact && styles.typeTextCompact, supportTypeIndex === index && styles.typeTextActive]}>{type.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -260,7 +262,6 @@ export function SettingsScreen({ navigation }: AppScreenProps<'Settings'>) {
 const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
-    paddingBottom: 96,
   },
   card: {
     gap: spacing.sm,
@@ -289,10 +290,13 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 3,
   },
-  typeGrid: {
+   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  typeGridCompact: {
+    gap: 6,
   },
   typeChip: {
     borderRadius: radius.pill,
@@ -302,6 +306,10 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
+  typeChipCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   typeChipActive: {
     borderColor: colors.cyan,
     backgroundColor: 'rgba(69,224,255,0.12)',
@@ -310,6 +318,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     fontWeight: '800',
+  },
+  typeTextCompact: {
+    fontSize: 11,
   },
   typeTextActive: {
     color: colors.text,

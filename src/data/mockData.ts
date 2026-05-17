@@ -11,6 +11,8 @@ import {
   ReceivedGift,
   TopicTag,
 } from '../types';
+import { resolveAvatarId } from '../utils/avatarResolver';
+import { getSymbolDefinition, isSymbolId } from '../utils/symbolAvatar';
 
 export const topics: TopicTag[] = ['İlişki', 'İş', 'Para', 'Sağlık', 'Genel'];
 
@@ -33,7 +35,7 @@ export const giftBonusByPlan: Record<MembershipPlan, number> = {
 
 export const avatarOptions: AvatarOption[] = [
   {
-    id: 'f-1',
+    id: 'aphrodite',
     gender: 'Kadın',
     name: 'Nova',
     vibe: 'Sakin güç',
@@ -45,7 +47,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'sparkles',
   },
   {
-    id: 'f-2',
+    id: 'athena',
     gender: 'Kadın',
     name: 'Luna',
     vibe: 'Gece kuşu',
@@ -57,7 +59,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'moon',
   },
   {
-    id: 'f-3',
+    id: 'selene',
     gender: 'Kadın',
     name: 'Rhea',
     vibe: 'Nezaket',
@@ -69,7 +71,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'rose',
   },
   {
-    id: 'f-4',
+    id: 'iris',
     gender: 'Kadın',
     name: 'Mira',
     vibe: 'Empati',
@@ -81,7 +83,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'leaf',
   },
   {
-    id: 'm-1',
+    id: 'apollo',
     gender: 'Erkek',
     name: 'Atlas',
     vibe: 'Güven',
@@ -93,7 +95,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'shield',
   },
   {
-    id: 'm-2',
+    id: 'hermes',
     gender: 'Erkek',
     name: 'Eren',
     vibe: 'Dinleyici',
@@ -105,7 +107,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'mic',
   },
   {
-    id: 'm-3',
+    id: 'ares',
     gender: 'Erkek',
     name: 'Kuzey',
     vibe: 'Hızlı enerji',
@@ -117,7 +119,7 @@ export const avatarOptions: AvatarOption[] = [
     accessory: 'flash',
   },
   {
-    id: 'm-4',
+    id: 'poseidon',
     gender: 'Erkek',
     name: 'Baran',
     vibe: 'Sabit duruş',
@@ -179,13 +181,26 @@ export const plans: Plan[] = [
 ];
 
 export const gifts: GiftItem[] = [
-  { id: 'heart', name: 'Kalp', symbol: '❤️', price: '79.99 TL', caption: 'Kalpten destek', accent: ['#FF4F9B', '#FF7EB3'] },
-  { id: 'rose', name: 'Gül', symbol: '🌹', price: '59.99 TL', caption: 'Nazik bir dokunuş', accent: ['#FF5A75', '#A93DFF'] },
-  { id: 'coffee', name: 'Kahve', symbol: '☕', price: '59.99 TL', caption: 'Sıcacık mola', accent: ['#FFAE57', '#8E4E2A'] },
-  { id: 'flower', name: 'Çiçek', symbol: '🌸', price: '59.99 TL', caption: 'Moral yükseltir', accent: ['#FF78C9', '#FFB5D9'] },
-  { id: 'car', name: 'Araba', symbol: '🏎', price: '59.99 TL', caption: 'Hızlı sürpriz', accent: ['#49A8FF', '#7158FF'] },
-  { id: 'wine', name: 'Şarap', symbol: '🍷', price: '59.99 TL', caption: 'Uzun gece bonusu', accent: ['#C64FFF', '#FF6799'] },
-  { id: 'credits', name: '10 hediye kredisi', symbol: '🎁', price: '149.99 TL', caption: 'Toplu kredi', accent: ['#6F6BFF', '#43D4FF'] },
+  { id: 'heart', name: 'Kalp', symbol: '❤️', price: '49.99 TRY', priceTry: 49.99, bonusSeconds: 300, caption: '+5 dakika özel destek', accent: ['#FF4F9B', '#FF7EB3'] },
+  { id: 'car', name: 'Araba', symbol: '🏎', price: '49.99 TRY', priceTry: 49.99, bonusSeconds: 300, caption: '+5 dakika hızlı sürpriz', accent: ['#49A8FF', '#7158FF'] },
+  { id: 'star', name: 'Yıldız', symbol: '⭐', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika parlak destek', accent: ['#FFD66B', '#FF8A4C'] },
+  { id: 'moon', name: 'Ay', symbol: '🌙', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika sakin gece', accent: ['#7DA2FF', '#8F46FF'] },
+  { id: 'coffee', name: 'Kahve', symbol: '☕', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika sıcak mola', accent: ['#FFAE57', '#8E4E2A'] },
+  { id: 'flower', name: 'Çiçek', symbol: '🌸', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika nazik dokunuş', accent: ['#FF78C9', '#FFB5D9'] },
+  { id: 'rose', name: 'Gül', symbol: '🌹', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika içten jest', accent: ['#FF5A75', '#A93DFF'] },
+  { id: 'diamond', name: 'Elmas', symbol: '💎', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika değerli an', accent: ['#5BE7FF', '#7C5CFF'] },
+  { id: 'crown', name: 'Taç', symbol: '👑', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika premium jest', accent: ['#FFD15E', '#C18424'] },
+  { id: 'microphone', name: 'Mikrofon', symbol: '🎙️', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika konuşma desteği', accent: ['#40D9FF', '#2D62FF'] },
+  { id: 'headphones', name: 'Kulaklık', symbol: '🎧', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika net bağlantı', accent: ['#6EE7FF', '#5F67FF'] },
+  { id: 'balloon', name: 'Balon', symbol: '🎈', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika hafif sevinç', accent: ['#FF5EA8', '#FF745B'] },
+  { id: 'lightning', name: 'Şimşek', symbol: '⚡', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika enerjik destek', accent: ['#FFE667', '#FF7E35'] },
+  { id: 'butterfly', name: 'Kelebek', symbol: '🦋', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika yumuşak his', accent: ['#54D6FF', '#D35BFF'] },
+  { id: 'sun', name: 'Güneş', symbol: '☀️', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika sıcak moral', accent: ['#FFD560', '#FF8C42'] },
+  { id: 'evil-eye', name: 'Nazar', symbol: '🧿', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika koruyucu jest', accent: ['#2CE3FF', '#315BFF'] },
+  { id: 'key', name: 'Anahtar', symbol: '🗝️', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika yeni kapı', accent: ['#FFC857', '#7A5CFF'] },
+  { id: 'rocket', name: 'Roket', symbol: '🚀', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika hızlı destek', accent: ['#FF6F8F', '#6B66FF'] },
+  { id: 'pearl', name: 'İnci', symbol: '⚪', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika zarif hediye', accent: ['#E8F7FF', '#A88CFF'] },
+  { id: 'angel-wing', name: 'Melek Kanadı', symbol: '🪽', price: '19.99 TRY', priceTry: 19.99, bonusSeconds: 120, caption: '+2 dakika yumuşak destek', accent: ['#E8F4FF', '#FF9EE8'] },
 ];
 
 export const badges: Badge[] = [
@@ -205,21 +220,21 @@ export const letters: Letter[] = [
 ];
 
 export const nightRoomUsers: NightRoomUser[] = [
-  { id: '1', alias: 'Miray', role: 'Konuşuyor', avatarId: 'f-2', speaking: true },
-  { id: '2', alias: 'Eren', role: 'Dinliyor', avatarId: 'm-2' },
-  { id: '3', alias: 'Nova', role: 'Dinliyor', avatarId: 'f-1' },
-  { id: '4', alias: 'Baran', role: 'Dinliyor', avatarId: 'm-4' },
+  { id: '1', alias: 'Miray', role: 'Konuşuyor', avatarId: 'athena', speaking: true },
+  { id: '2', alias: 'Eren', role: 'Dinliyor', avatarId: 'hermes' },
+  { id: '3', alias: 'Nova', role: 'Dinliyor', avatarId: 'aphrodite' },
+  { id: '4', alias: 'Baran', role: 'Dinliyor', avatarId: 'poseidon' },
 ];
 
 export const silentListeners: Listener[] = [
-  { id: '1', avatarId: 'f-1', muted: true },
-  { id: '2', avatarId: 'm-1', muted: true },
-  { id: '3', avatarId: 'f-3', muted: true },
-  { id: '4', avatarId: 'm-3', muted: true },
-  { id: '5', avatarId: 'f-4', muted: true },
-  { id: '6', avatarId: 'm-2', muted: true },
-  { id: '7', avatarId: 'f-2', muted: true },
-  { id: '8', avatarId: 'm-4', muted: true },
+  { id: '1', avatarId: 'aphrodite', muted: true },
+  { id: '2', avatarId: 'apollo', muted: true },
+  { id: '3', avatarId: 'selene', muted: true },
+  { id: '4', avatarId: 'ares', muted: true },
+  { id: '5', avatarId: 'iris', muted: true },
+  { id: '6', avatarId: 'hermes', muted: true },
+  { id: '7', avatarId: 'athena', muted: true },
+  { id: '8', avatarId: 'poseidon', muted: true },
 ];
 
 export const receivedGifts: ReceivedGift[] = [
@@ -248,7 +263,7 @@ export const defaultProfile = {
   relationshipStatus: 'Bekar',
   joinDate: '12.03.2024',
   plan: 'free' as const,
-  avatarId: 'f-1',
+  avatarId: 'aphrodite',
   mood: 'Konuşmak istiyorum',
   email: 'gizli@derdimvar.app',
   lastUsernameChangeDate: '2026-04-01T12:00:00.000Z',
@@ -258,9 +273,37 @@ export const defaultProfile = {
 
 export const guestProfile = {
   username: 'atlas_anon',
-  avatarId: 'm-1',
+  avatarId: 'apollo',
 };
 
+export function getAvatarOptionByCanonicalId(avatarId: string) {
+  const avatar = avatarOptions.find((item) => item.id === avatarId);
+
+  if (avatar) {
+    return avatar;
+  }
+
+  if (isSymbolId(avatarId)) {
+    const symbol = getSymbolDefinition(avatarId);
+
+    return {
+      id: symbol.id,
+      gender: 'Kadın' as const,
+      name: symbol.title,
+      vibe: symbol.subtitle,
+      palette: symbol.palette,
+      skinTone: symbol.accent,
+      hairColor: symbol.glow,
+      outfitColor: symbol.palette[0],
+      accentColor: symbol.accent,
+      accessory: 'sparkles' as const,
+    };
+  }
+
+  return avatarOptions[0];
+}
+
 export function getAvatarById(avatarId: string) {
-  return avatarOptions.find((avatar) => avatar.id === avatarId) ?? avatarOptions[0];
+  const resolvedAvatarId = resolveAvatarId(avatarId);
+  return getAvatarOptionByCanonicalId(resolvedAvatarId);
 }

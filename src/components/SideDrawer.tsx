@@ -2,12 +2,11 @@ import { useEffect, useRef } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar } from './Avatar';
 import { BadgePill } from './BadgePill';
 import { GlassCard } from './GlassCard';
+import { UserAvatar } from './UserAvatar';
 import { colors, radius, spacing } from '../constants/theme';
 import { AppProfile } from '../types';
-import { getAvatarById } from '../data/mockData';
 
 type DrawerItem = {
   label: string;
@@ -28,7 +27,6 @@ export function SideDrawer({ visible, profile, userScore, userLevel, onClose, it
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(width * 0.84, 360);
   const translateX = useRef(new Animated.Value(-drawerWidth)).current;
-  const avatar = getAvatarById(profile.avatarId);
 
   useEffect(() => {
     Animated.timing(translateX, {
@@ -46,7 +44,13 @@ export function SideDrawer({ visible, profile, userScore, userLevel, onClose, it
           <GlassCard style={styles.drawerCard} toned="strong">
             <View style={styles.topRow}>
               <View style={styles.identityRow}>
-                <Avatar avatar={avatar} size={64} />
+                <UserAvatar
+                  avatarId={profile.avatarId}
+                  avatarSourceType="current-profile"
+                  fallbackGender={profile.gender}
+                  renderedUserId={profile.username}
+                  size={64}
+                />
                 <View style={styles.identityCopy}>
                   <Text style={styles.username}>{profile.username}</Text>
                   <Text style={styles.meta}>

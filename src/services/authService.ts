@@ -6,10 +6,11 @@ import { Platform } from 'react-native';
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
 import { defaultProfile } from '../data/mockData';
-import { getSafeErrorMessage, logSafeError } from '../lib/safeLogger';
+import { getSafeErrorMessage, logSafeError, logSafeWarn } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { MembershipPlan } from '../types';
+import { Gender, MembershipPlan } from '../types';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
+import { resolveAvatarId } from '../utils/avatarResolver';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -26,6 +27,7 @@ type ProfileSeed = {
   username: string;
   plan: MembershipPlan;
   avatarId: string;
+  gender: Gender;
   email?: string;
   isFrozen?: boolean;
 };
@@ -34,10 +36,24 @@ type AuthPayload = {
   user: User | null;
   session: Session | null;
   profile: ProfileSeed | null;
+  isNewUser?: boolean;
+  requiresProfileCompletion?: boolean;
+};
+
+type EmailSignUpPayload = {
+  user: User | null;
+  session: Session | null;
+  requiresEmailConfirmation: boolean;
+};
+
+type ProfileSeedResult = {
+  profile: ProfileSeed;
+  isNewUser: boolean;
 };
 
 const AUTH_CALLBACK_PATH = 'auth-callback';
 const NATIVE_REDIRECT_URI = 'derdimvar://auth-callback';
+const DEFAULT_PROFILE_AVATAR_ID = 'heart';
 
 export const authRedirectUri = makeRedirectUri({
   scheme: 'derdimvar',
@@ -55,6 +71,76 @@ function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeOptionalAvatarId(value: unknown) {
+  return normalizeText(value);
+}
+
+function normalizeGender(value: unknown): Gender {
+  return value === 'Erkek' || value === defaultProfile.gender ? value : defaultProfile.gender;
+}
+
+function getEmailPrefix(email: unknown) {
+  const normalizedEmail = normalizeText(email);
+
+  if (!normalizedEmail.includes('@')) {
+    return '';
+  }
+
+  return normalizeText(normalizedEmail.split('@')[0]);
+}
+
+export function resolveUsernameByPriority(input: {
+  profileUsername?: unknown;
+  metadataUsername?: unknown;
+  email?: unknown;
+}) {
+  const profileUsername = normalizeText(input.profileUsername);
+
+  if (profileUsername) {
+    return profileUsername;
+  }
+
+  const metadataUsername = normalizeText(input.metadataUsername);
+
+  if (metadataUsername) {
+    return metadataUsername;
+  }
+
+  const emailPrefix = getEmailPrefix(input.email);
+
+  if (emailPrefix) {
+    return emailPrefix;
+  }
+
+  return 'Anonim';
+}
+
+export function resolveDisplayName(input: {
+  username?: unknown;
+  displayName?: unknown;
+  currentUserMetadataUsername?: unknown;
+}) {
+  const username = normalizeText(input.username);
+
+  if (username) {
+    return username;
+  }
+
+  const displayName = normalizeText(input.displayName);
+
+  if (displayName) {
+    return displayName;
+  }
+
+  const metadataUsername = normalizeText(input.currentUserMetadataUsername);
+
+  if (metadataUsername) {
+    return metadataUsername;
+  }
+
+  return 'Anonim';
+}
+
 function slugifyUsername(value: string) {
   const normalized = value
     .toLowerCase()
@@ -67,28 +153,19 @@ function slugifyUsername(value: string) {
 }
 
 function buildUsername(user: User, preferredName?: string) {
-  const candidates = [
-    preferredName,
-    normalizeText(user.user_metadata?.username),
-    normalizeText(user.user_metadata?.full_name),
-    normalizeText(user.user_metadata?.name),
-    normalizeText(user.user_metadata?.given_name),
-    normalizeText(user.email?.split('@')[0]),
-  ];
+  const prioritizedUsername = resolveUsernameByPriority({
+    profileUsername: preferredName,
+    metadataUsername: user.user_metadata?.username,
+    email: user.email,
+  });
 
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
+  const slug = slugifyUsername(prioritizedUsername);
 
-    const slug = slugifyUsername(candidate);
-
-    if (slug.length > 0) {
-      return slug;
-    }
+  if (slug.length > 0) {
+    return slug;
   }
 
-  return `gizli_kullanici_${user.id.slice(0, 6)}`;
+  return 'anonim';
 }
 
 function parseCallbackUrl(url: string) {
@@ -112,26 +189,51 @@ function normalizePlan(value: unknown): MembershipPlan {
   return value === 'plus' || value === 'vip' ? value : 'free';
 }
 
+function hasAcceptedLegal(user?: User | null) {
+  return Boolean(user?.user_metadata?.legalAcceptedAt);
+}
+
+function isRecentlyCreatedUser(user?: User | null) {
+  const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
+
+  if (!createdAt || Number.isNaN(createdAt)) {
+    return false;
+  }
+
+  return Date.now() - createdAt < 2 * 60 * 1000;
+}
+
+function needsSocialProfileCompletion(user?: User | null, profile?: ProfileSeed | null, isNewUser = false) {
+  if (!user) {
+    return false;
+  }
+
+  const username = normalizeText(profile?.username);
+  const avatarId = normalizeText(profile?.avatarId);
+  return isNewUser || isRecentlyCreatedUser(user) || !hasAcceptedLegal(user) || !username || !avatarId;
+}
+
 async function upsertProfileRecord(
   user: User,
-  seed?: Partial<Pick<ProfileSeed, 'username' | 'plan' | 'avatarId'>>,
-): Promise<ProfileSeed> {
+  seed?: Partial<Pick<ProfileSeed, 'username' | 'plan' | 'avatarId' | 'gender'>>,
+): Promise<ProfileSeedResult> {
   const fallbackProfile: ProfileSeed = {
     username: normalizeText(seed?.username) || buildUsername(user),
     plan: seed?.plan ?? 'free',
-    avatarId: normalizeText(seed?.avatarId) || defaultProfile.avatarId,
+    avatarId: normalizeText(seed?.avatarId) || DEFAULT_PROFILE_AVATAR_ID,
+    gender: normalizeGender(seed?.gender),
     email: user.email ?? undefined,
     isFrozen: false,
   };
 
   if (!isSupabaseConfigured) {
-    return fallbackProfile;
+    return { profile: fallbackProfile, isNewUser: false };
   }
 
   try {
     const { data: existingProfile, error: fetchError } = await supabase
       .from('profiles')
-      .select('user_id, username, plan, avatar_id, status, is_frozen')
+      .select('user_id, username, plan, avatar_id, gender, status, is_frozen')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -141,11 +243,15 @@ async function upsertProfileRecord(
 
     if (existingProfile) {
       return {
-        username: normalizeText(existingProfile.username) || fallbackProfile.username || 'user',
-        plan: normalizePlan(existingProfile.plan),
-        avatarId: normalizeText(existingProfile.avatar_id) || fallbackProfile.avatarId,
-        email: fallbackProfile.email,
-        isFrozen: Boolean(existingProfile.is_frozen) || existingProfile.status === 'frozen',
+        profile: {
+          username: normalizeText(existingProfile.username) || fallbackProfile.username || 'user',
+          plan: normalizePlan(existingProfile.plan),
+          avatarId: normalizeOptionalAvatarId(existingProfile.avatar_id),
+          gender: normalizeGender(existingProfile.gender),
+          email: fallbackProfile.email,
+          isFrozen: Boolean(existingProfile.is_frozen) || existingProfile.status === 'frozen',
+        },
+        isNewUser: false,
       };
     }
 
@@ -157,14 +263,14 @@ async function upsertProfileRecord(
           username: fallbackProfile.username || 'user',
           plan: fallbackProfile.plan,
           avatar_id: fallbackProfile.avatarId,
-          email: fallbackProfile.email ?? null,
+          gender: fallbackProfile.gender,
           status: 'active',
           is_frozen: false,
           created_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' },
       )
-      .select('user_id, username, plan, avatar_id')
+      .select('user_id, username, plan, avatar_id, gender')
       .single();
 
     if (error) {
@@ -172,24 +278,30 @@ async function upsertProfileRecord(
     }
 
     return {
-      username: normalizeText(data?.username) || fallbackProfile.username || 'user',
-      plan: normalizePlan(data?.plan),
-      avatarId: normalizeText(data?.avatar_id) || fallbackProfile.avatarId,
-      email: fallbackProfile.email,
-      isFrozen: false,
+      profile: {
+        username: normalizeText(data?.username) || fallbackProfile.username || 'user',
+        plan: normalizePlan(data?.plan),
+        avatarId: normalizeOptionalAvatarId(data?.avatar_id) || fallbackProfile.avatarId,
+        gender: normalizeGender(data?.gender),
+        email: fallbackProfile.email,
+        isFrozen: false,
+      },
+      isNewUser: true,
     };
   } catch (error) {
     console.warn('[auth] profiles upsert skipped:', getSafeErrorMessage(error, 'unknown error'));
-    return fallbackProfile;
+    return { profile: fallbackProfile, isNewUser: true };
   }
 }
 
 async function ensureProfileRecord(user: User, preferredName?: string): Promise<ProfileSeed> {
-  return upsertProfileRecord(user, {
+  const result = await upsertProfileRecord(user, {
     username: buildUsername(user, preferredName) || 'user',
     plan: 'free',
-    avatarId: defaultProfile.avatarId,
+    avatarId: DEFAULT_PROFILE_AVATAR_ID,
+    gender: defaultProfile.gender,
   });
+  return result.profile;
 }
 
 function toAuthError(error: unknown, fallbackMessage: string): AuthServiceError {
@@ -243,7 +355,7 @@ export async function signUpWithEmail(
   email: string,
   password: string,
   username: string,
-): Promise<AuthServiceResult<{ user: User | null; session: Session | null }>> {
+): Promise<AuthServiceResult<EmailSignUpPayload>> {
   if (!isSupabaseConfigured) {
     return { data: null, error: getMissingEnvError() };
   }
@@ -252,6 +364,7 @@ export async function signUpWithEmail(
     email,
     password,
     options: {
+      emailRedirectTo: authRedirectUri,
       data: {
         username,
       },
@@ -269,23 +382,44 @@ export async function signUpWithEmail(
     };
   }
 
-  if (!error && data.user && !data.session) {
-    return {
-      data: null,
-      error: { message: 'E-posta doğrulaması gerekiyor. Lütfen e-postanı kontrol et.' },
-    };
-  }
 
   if (!error && data.user) {
     await upsertProfileRecord(data.user, {
       username: normalizeText(username) || 'user',
       plan: 'free',
-      avatarId: defaultProfile.avatarId,
+      avatarId: DEFAULT_PROFILE_AVATAR_ID,
+      gender: defaultProfile.gender,
     });
   }
 
+  if (!error && data.user && !data.session) {
+    const signInResult = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (!signInResult.error && signInResult.data.session) {
+      return {
+        data: {
+          user: signInResult.data.user,
+          session: signInResult.data.session,
+          requiresEmailConfirmation: false,
+        },
+        error: null,
+      };
+    }
+
+    return {
+      data: {
+        user: data.user,
+        session: null,
+        requiresEmailConfirmation: true,
+      },
+      error: null,
+    };
+  }
   return {
-    data: error ? null : { user: data.user, session: data.session },
+    data: error ? null : { user: data.user, session: data.session, requiresEmailConfirmation: false },
     error: error ? { message: getFriendlyErrorMessage(error, 'Kayıt oluşturulamadı. Lütfen tekrar deneyin.') } : null,
   };
 }
@@ -406,19 +540,14 @@ export async function updateCurrentUserPlan(plan: MembershipPlan): Promise<AuthS
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .upsert(
-        {
-          user_id: userResult.data.id,
-          username: baseProfile.username || 'user',
-          plan,
-          avatar_id: baseProfile.avatarId,
-          email: userResult.data.email ?? null,
-          status: 'active',
-          is_frozen: false,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' },
-      )
+      .update({
+        username: baseProfile.username || 'user',
+        plan,
+        avatar_id: baseProfile.avatarId || null,
+        status: 'active',
+        is_frozen: false,
+      })
+      .eq('user_id', userResult.data.id)
       .select('username, plan, avatar_id')
       .single();
 
@@ -430,7 +559,8 @@ export async function updateCurrentUserPlan(plan: MembershipPlan): Promise<AuthS
       data: {
         username: normalizeText(data?.username) || baseProfile.username || 'user',
         plan: normalizePlan(data?.plan),
-        avatarId: normalizeText(data?.avatar_id) || baseProfile.avatarId,
+        avatarId: normalizeOptionalAvatarId(data?.avatar_id),
+        gender: baseProfile.gender,
         email: userResult.data.email ?? undefined,
       },
       error: null,
@@ -439,6 +569,152 @@ export async function updateCurrentUserPlan(plan: MembershipPlan): Promise<AuthS
     return {
       data: null,
       error: toAuthError(error, 'Plan guncellenemedi.'),
+    };
+  }
+}
+
+export async function updateCurrentUserAvatarSelection(
+  avatarId: string,
+  gender?: Gender,
+): Promise<AuthServiceResult<ProfileSeed>> {
+  const userResult = await getCurrentUser();
+
+  if (userResult.error) {
+    return { data: null, error: userResult.error };
+  }
+
+  if (!userResult.data) {
+    return {
+      data: null,
+      error: { message: 'Avatar guncellemek icin aktif oturum bulunamadi.' },
+    };
+  }
+
+  const rawAvatarId = normalizeText(avatarId);
+
+  if (!rawAvatarId) {
+    return {
+      data: null,
+      error: { message: 'Devam etmek icin bir sembol secmelisin.' },
+    };
+  }
+
+  const normalizedAvatarId = resolveAvatarId(rawAvatarId, gender);
+  const normalizedGender = normalizeGender(gender);
+  const baseProfile = await ensureProfileRecord(userResult.data);
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        username: baseProfile.username || 'user',
+        plan: baseProfile.plan,
+        avatar_id: normalizedAvatarId,
+        gender: normalizedGender,
+        status: baseProfile.isFrozen ? 'frozen' : 'active',
+        is_frozen: Boolean(baseProfile.isFrozen),
+      })
+      .eq('user_id', userResult.data.id)
+      .select('username, plan, avatar_id, gender, is_frozen')
+      .single();
+
+    if (error) {
+      return { data: null, error: { message: getFriendlyErrorMessage(error, 'Avatar kaydedilemedi.') } };
+    }
+
+    return {
+      data: {
+        username: normalizeText(data?.username) || baseProfile.username || 'user',
+        plan: normalizePlan(data?.plan),
+        avatarId: normalizeOptionalAvatarId(data?.avatar_id) || normalizedAvatarId,
+        gender: normalizeGender(data?.gender),
+        email: userResult.data.email ?? undefined,
+        isFrozen: Boolean(data?.is_frozen),
+      },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: toAuthError(error, 'Avatar kaydedilemedi.'),
+    };
+  }
+}
+
+export async function updateCurrentUserProfileDetails(input: {
+  gender: Gender;
+}): Promise<AuthServiceResult<ProfileSeed>> {
+  const userResult = await getCurrentUser();
+
+  if (userResult.error) {
+    return { data: null, error: userResult.error };
+  }
+
+  if (!userResult.data) {
+    return {
+      data: null,
+      error: { message: 'Profil bilgilerini kaydetmek icin aktif oturum bulunamadi.' },
+    };
+  }
+
+  const normalizedGender = normalizeGender(input.gender);
+  const baseProfile = await ensureProfileRecord(userResult.data);
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        username: baseProfile.username || 'user',
+        plan: baseProfile.plan,
+        avatar_id: baseProfile.avatarId || null,
+        gender: normalizedGender,
+        status: baseProfile.isFrozen ? 'frozen' : 'active',
+        is_frozen: Boolean(baseProfile.isFrozen),
+      })
+      .eq('user_id', userResult.data.id)
+      .select('username, plan, avatar_id, gender, is_frozen')
+      .single();
+
+    if (error) {
+      logSafeWarn('[auth] profile details update skipped', error, {
+        functionName: 'updateCurrentUserProfileDetails',
+        table: 'profiles',
+      });
+
+      return {
+        data: {
+          ...baseProfile,
+          gender: normalizedGender,
+          email: userResult.data.email ?? undefined,
+        },
+        error: null,
+      };
+    }
+
+    return {
+      data: {
+        username: normalizeText(data?.username) || baseProfile.username || 'user',
+        plan: normalizePlan(data?.plan),
+        avatarId: normalizeOptionalAvatarId(data?.avatar_id) || baseProfile.avatarId,
+        gender: normalizeGender(data?.gender),
+        email: userResult.data.email ?? undefined,
+        isFrozen: Boolean(data?.is_frozen),
+      },
+      error: null,
+    };
+  } catch (error) {
+    logSafeWarn('[auth] profile details save skipped', error, {
+      functionName: 'updateCurrentUserProfileDetails',
+      table: 'profiles',
+    });
+
+    return {
+      data: {
+        ...baseProfile,
+        gender: normalizedGender,
+        email: userResult.data.email ?? undefined,
+      },
+      error: null,
     };
   }
 }
@@ -510,10 +786,21 @@ export async function signInWithApple(): Promise<AuthServiceResult<AuthPayload>>
       return { data: null, error: { message: getFriendlyErrorMessage(error, 'Apple ile giriş başarısız oldu.') } };
     }
 
-    const profile = data.user ? await ensureProfileRecord(data.user, fullName) : null;
+    const profileResult = data.user ? await upsertProfileRecord(data.user, {
+      username: buildUsername(data.user, fullName) || 'user',
+      plan: 'free',
+      avatarId: DEFAULT_PROFILE_AVATAR_ID,
+      gender: defaultProfile.gender,
+    }) : null;
 
     return {
-      data: { user: data.user, session: data.session, profile },
+      data: {
+        user: data.user,
+        session: data.session,
+        profile: profileResult?.profile ?? null,
+        isNewUser: profileResult?.isNewUser ?? false,
+        requiresProfileCompletion: needsSocialProfileCompletion(data.user, profileResult?.profile ?? null, profileResult?.isNewUser ?? false),
+      },
       error: null,
     };
   } catch (error) {
@@ -583,13 +870,20 @@ export async function signInWithGoogle(): Promise<AuthServiceResult<AuthPayload>
       };
     }
 
-    const profile = await ensureProfileRecord(authResult.data.user);
+    const profileResult = await upsertProfileRecord(authResult.data.user, {
+      username: buildUsername(authResult.data.user) || 'user',
+      plan: 'free',
+      avatarId: DEFAULT_PROFILE_AVATAR_ID,
+      gender: defaultProfile.gender,
+    });
 
     return {
       data: {
         user: authResult.data.user,
         session: authResult.data.session,
-        profile,
+        profile: profileResult.profile,
+        isNewUser: profileResult.isNewUser,
+        requiresProfileCompletion: needsSocialProfileCompletion(authResult.data.user, profileResult.profile, profileResult.isNewUser),
       },
       error: null,
     };
@@ -597,4 +891,86 @@ export async function signInWithGoogle(): Promise<AuthServiceResult<AuthPayload>
     logSafeError('[auth] Google sign-in failed', error);
     return { data: null, error: toAuthError(error, 'Google ile giris basarisiz oldu.') };
   }
+}
+
+export async function completeSocialProfileSetup(
+  username: string,
+  legalAccepted: boolean,
+): Promise<AuthServiceResult<ProfileSeed>> {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: getMissingEnvError() };
+  }
+
+  const userResult = await getCurrentUser();
+
+  if (userResult.error) {
+    return { data: null, error: userResult.error };
+  }
+
+  if (!userResult.data) {
+    return {
+      data: null,
+      error: { message: 'Aktif oturum bulunamadı. Lütfen tekrar giriş yap.' },
+    };
+  }
+
+  const normalizedUsername = normalizeText(username);
+
+  if (!normalizedUsername) {
+    return {
+      data: null,
+      error: { message: 'Rumuz zorunludur.' },
+    };
+  }
+
+  const baseProfile = await ensureProfileRecord(userResult.data, normalizedUsername);
+  const acceptedAt = legalAccepted ? new Date().toISOString() : undefined;
+
+  const { error: authError } = await supabase.auth.updateUser({
+    data: {
+      username: normalizedUsername,
+      legalAcceptedAt: acceptedAt,
+      legalAcceptedVersion: legalAccepted ? 'v1' : undefined,
+    },
+  });
+
+  if (authError) {
+    return {
+      data: null,
+      error: { message: getFriendlyErrorMessage(authError, 'Profil bilgileri kaydedilemedi.') },
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      username: normalizedUsername,
+      plan: baseProfile.plan,
+      avatar_id: baseProfile.avatarId || null,
+      gender: baseProfile.gender,
+      status: baseProfile.isFrozen ? 'frozen' : 'active',
+      is_frozen: Boolean(baseProfile.isFrozen),
+    })
+    .eq('user_id', userResult.data.id)
+    .select('username, plan, avatar_id, gender, is_frozen')
+    .single();
+
+  if (error) {
+    return {
+      data: null,
+      error: { message: getFriendlyErrorMessage(error, 'Profil bilgileri kaydedilemedi.') },
+    };
+  }
+
+  return {
+    data: {
+      username: normalizeText(data?.username) || normalizedUsername,
+      plan: normalizePlan(data?.plan),
+      avatarId: normalizeOptionalAvatarId(data?.avatar_id),
+      gender: normalizeGender(data?.gender),
+      email: userResult.data.email ?? undefined,
+      isFrozen: Boolean(data?.is_frozen),
+    },
+    error: null,
+  };
 }

@@ -40,7 +40,7 @@ export async function submitSupportReport(input: SupportReportInput): Promise<Se
   });
 
   if (error) {
-    console.error('[support] submit report failed:', error.message);
+    console.warn('[support] submit report failed:', error.message);
     return { data: null, error: { message: getFriendlyErrorMessage(error, 'Talep gönderilemedi. Lütfen tekrar deneyin.') } };
   }
 

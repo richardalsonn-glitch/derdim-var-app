@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -24,6 +24,9 @@ const compactFeatures: Record<string, string[]> = {
 };
 
 export function PackagesScreen({ navigation }: AppScreenProps<'Packages'>) {
+  const { width, height } = useWindowDimensions();
+  const compact = width <= 390 || height <= 844;
+  const tiny = width < 350 || height < 740;
   const { profile, setPlan } = useAppState();
 
   return (
@@ -38,7 +41,7 @@ export function PackagesScreen({ navigation }: AppScreenProps<'Packages'>) {
 
           return (
             <LinearGradient colors={plan.accent} key={plan.id} style={[styles.wrap, vipCard && styles.vipWrap]}>
-              <View style={styles.inner}>
+              <View style={[styles.inner, compact && styles.innerCompact]}>
                 <View style={styles.topRow}>
                   <View style={styles.heading}>
                     <View style={styles.badgeRow}>
@@ -46,17 +49,17 @@ export function PackagesScreen({ navigation }: AppScreenProps<'Packages'>) {
                       <Text style={styles.badgeLabel}>{plan.badge}</Text>
                       {active ? <Text style={styles.activePill}>Aktif plan</Text> : null}
                     </View>
-                    <Text style={styles.name}>{plan.name}</Text>
-                    <Text numberOfLines={1} style={styles.description}>{plan.description}</Text>
+                    <Text style={[styles.name, tiny && styles.nameCompact]}>{plan.name}</Text>
+                    <Text numberOfLines={2} style={styles.description}>{plan.description}</Text>
                   </View>
-                  <Text style={styles.price}>{plan.price}</Text>
+                  <Text style={[styles.price, compact && styles.priceCompact]}>{plan.price}</Text>
                 </View>
 
                 <View style={styles.featureList}>
                   {features.map((feature) => (
-                    <View key={feature} style={styles.featureRow}>
+                    <View key={feature} style={[styles.featureRow, tiny && styles.featureRowFull]}>
                       <Ionicons color={vipCard ? colors.goldSoft : colors.cyan} name="checkmark-circle" size={14} />
-                      <Text numberOfLines={1} style={styles.featureText}>{feature}</Text>
+                      <Text numberOfLines={2} style={styles.featureText}>{feature}</Text>
                     </View>
                   ))}
                 </View>
@@ -85,7 +88,6 @@ export function PackagesScreen({ navigation }: AppScreenProps<'Packages'>) {
 const styles = StyleSheet.create({
   content: {
     gap: spacing.sm,
-    paddingBottom: 80,
   },
   planStack: {
     gap: spacing.sm,
@@ -106,6 +108,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(7, 10, 28, 0.92)',
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  innerCompact: {
+    padding: spacing.sm,
+    gap: spacing.xs,
   },
   topRow: {
     flexDirection: 'row',
@@ -142,6 +148,9 @@ const styles = StyleSheet.create({
     fontSize: 23,
     fontWeight: '900',
   },
+  nameCompact: {
+    fontSize: 20,
+  },
   description: {
     color: colors.muted,
     fontSize: 12,
@@ -153,6 +162,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'right',
   },
+  priceCompact: {
+    maxWidth: 92,
+    fontSize: 15,
+  },
   featureList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -163,6 +176,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+  },
+  featureRowFull: {
+    width: '100%',
   },
   featureText: {
     flex: 1,

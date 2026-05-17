@@ -1,7 +1,8 @@
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { colors } from '../constants/theme';
+import { FriendCallProvider } from '../providers/FriendCallProvider';
 import { AvatarSelectionScreen } from '../screens/AvatarSelectionScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { ChatScreen } from '../screens/ChatScreen';
@@ -28,6 +29,7 @@ import { VoiceCallScreen } from '../screens/VoiceCallScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const navigationTheme = {
   ...DarkTheme,
@@ -43,47 +45,49 @@ const navigationTheme = {
 
 export function AppNavigator() {
   return (
-    <NavigationContainer theme={navigationTheme}>
-      <Stack.Navigator
-        initialRouteName="Splash"
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen component={SplashScreen} name="Splash" />
-        <Stack.Screen component={LoginScreen} name="Login" />
-        <Stack.Screen component={RegisterScreen} name="Register" />
-        <Stack.Screen component={ProfileInfoScreen} name="ProfileInfo" />
-        <Stack.Screen component={AvatarSelectionScreen} name="AvatarSelection" />
-        <Stack.Screen component={HomeScreen} name="Home" />
-        <Stack.Screen component={VoiceCallScreen} name="VoiceCall" />
-        <Stack.Screen component={MatchingScreen} name="Matching" />
-        <Stack.Screen component={ChatScreen} name="Chat" />
-        <Stack.Screen component={GiftsScreen} name="Gifts" />
-        <Stack.Screen component={FriendsScreen} name="Friends" />
-        <Stack.Screen component={FriendProfileScreen} name="FriendProfile" />
-        <Stack.Screen component={FrozenAccountScreen} name="FrozenAccount" />
-        <Stack.Screen component={PackagesScreen} name="Packages" />
-        <Stack.Screen component={ProfileScreen} name="Profile" />
-        <Stack.Screen component={NightModeScreen} name="NightMode" />
-        <Stack.Screen component={NightRoomScreen} name="NightRoom" />
-        <Stack.Screen component={SilentScreamScreen} name="SilentScream" />
-        <Stack.Screen component={LettersScreen} name="Letters" />
-        <Stack.Screen component={RematchScreen} name="Rematch" />
-        <Stack.Screen component={BadgesScreen} name="Badges" />
-        <Stack.Screen component={SettingsScreen} name="Settings" />
-        <Stack.Screen
-          component={GiftPopupScreen}
-          name="GiftPopup"
-          options={{
-            animation: 'fade',
-            contentStyle: { backgroundColor: 'transparent' },
-            presentation: 'transparentModal',
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+      <FriendCallProvider navigationRef={navigationRef}>
+        <Stack.Navigator
+          initialRouteName="Splash"
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+            animation: 'slide_from_right',
           }}
-        />
-      </Stack.Navigator>
+        >
+          <Stack.Screen component={SplashScreen} name="Splash" />
+          <Stack.Screen component={LoginScreen} name="Login" />
+          <Stack.Screen component={RegisterScreen} name="Register" />
+          <Stack.Screen component={ProfileInfoScreen} name="ProfileInfo" />
+          <Stack.Screen component={AvatarSelectionScreen} name="AvatarSelection" />
+          <Stack.Screen component={HomeScreen} name="Home" />
+          <Stack.Screen component={VoiceCallScreen} name="VoiceCall" />
+          <Stack.Screen component={MatchingScreen} name="Matching" />
+          <Stack.Screen component={ChatScreen} name="Chat" />
+          <Stack.Screen component={GiftsScreen} name="Gifts" />
+          <Stack.Screen component={FriendsScreen} name="Friends" />
+          <Stack.Screen component={FriendProfileScreen} name="FriendProfile" />
+          <Stack.Screen component={FrozenAccountScreen} name="FrozenAccount" />
+          <Stack.Screen component={PackagesScreen} name="Packages" />
+          <Stack.Screen component={ProfileScreen} name="Profile" />
+          <Stack.Screen component={NightModeScreen} name="NightMode" />
+          <Stack.Screen component={NightRoomScreen} name="NightRoom" />
+          <Stack.Screen component={SilentScreamScreen} name="SilentScream" />
+          <Stack.Screen component={LettersScreen} name="Letters" />
+          <Stack.Screen component={RematchScreen} name="Rematch" />
+          <Stack.Screen component={BadgesScreen} name="Badges" />
+          <Stack.Screen component={SettingsScreen} name="Settings" />
+          <Stack.Screen
+            component={GiftPopupScreen}
+            name="GiftPopup"
+            options={{
+              animation: 'fade',
+              contentStyle: { backgroundColor: 'transparent' },
+              presentation: 'transparentModal',
+            }}
+          />
+        </Stack.Navigator>
+      </FriendCallProvider>
     </NavigationContainer>
   );
 }

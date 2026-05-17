@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -75,6 +75,11 @@ export function useCountdownTimer({ initialSeconds, onExpire, autoStart = true }
   const [remainingSeconds, setRemainingSeconds] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(autoStart);
   const expiredRef = useRef(false);
+  const onExpireRef = useRef(onExpire);
+
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
 
   useEffect(() => {
     setRemainingSeconds(initialSeconds);
@@ -98,24 +103,28 @@ export function useCountdownTimer({ initialSeconds, onExpire, autoStart = true }
     if (remainingSeconds === 0 && !expiredRef.current) {
       expiredRef.current = true;
       setIsRunning(false);
-      onExpire?.();
+      onExpireRef.current?.();
     }
-  }, [remainingSeconds, onExpire]);
+  }, [remainingSeconds]);
+
+  const addSeconds = useCallback((value: number) => {
+    expiredRef.current = false;
+    setRemainingSeconds((current) => current + value);
+    setIsRunning(true);
+  }, []);
+
+  const reset = useCallback((nextSeconds = initialSeconds, shouldRun = autoStart) => {
+    expiredRef.current = false;
+    setRemainingSeconds(nextSeconds);
+    setIsRunning(shouldRun);
+  }, [autoStart, initialSeconds]);
 
   return {
     remainingSeconds,
     isRunning,
     setIsRunning,
-    addSeconds: (value: number) => {
-      expiredRef.current = false;
-      setRemainingSeconds((current) => current + value);
-      setIsRunning(true);
-    },
-    reset: (nextSeconds = initialSeconds, shouldRun = autoStart) => {
-      expiredRef.current = false;
-      setRemainingSeconds(nextSeconds);
-      setIsRunning(shouldRun);
-    },
+    addSeconds,
+    reset,
   };
 }
 

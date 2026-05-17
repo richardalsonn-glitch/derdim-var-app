@@ -1,3 +1,4 @@
+import { logSafeWarn } from '../lib/safeLogger';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import { getSession } from './authService';
@@ -23,7 +24,7 @@ export async function freezeCurrentAccount(): Promise<ServiceResult<true>> {
     .eq('user_id', userId);
 
   if (error) {
-    console.error('[account] freeze failed:', error.message);
+    logSafeWarn('[account] freeze failed', error);
     return { data: null, error: { message: FRIENDLY_ACCOUNT_ERROR } };
   }
 
@@ -44,7 +45,7 @@ export async function reactivateCurrentAccount(): Promise<ServiceResult<true>> {
     .eq('user_id', userId);
 
   if (error) {
-    console.error('[account] reactivate failed:', error.message);
+    logSafeWarn('[account] reactivate failed', error);
     return { data: null, error: { message: FRIENDLY_ACCOUNT_ERROR } };
   }
 
@@ -82,7 +83,7 @@ export async function deleteCurrentAccount(): Promise<ServiceResult<true>> {
     await supabase.auth.signOut();
     return { data: true, error: null };
   } catch (error) {
-    console.error('[account] delete failed:', error instanceof Error ? error.message : 'unknown error');
+    logSafeWarn('[account] delete failed', error);
     return { data: null, error: { message: getFriendlyErrorMessage(error, FRIENDLY_ACCOUNT_ERROR) } };
   }
 }

@@ -1,8 +1,13 @@
-import { PropsWithChildren, createContext, useContext, useMemo, useState } from 'react';
+import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
-import { defaultProfile, getAvatarById, topics } from './mockData';
-import { updateCurrentUserPlan } from '../services/authService';
+import { defaultProfile, topics } from './mockData';
+import { logSafeDebug } from '../lib/safeLogger';
+import { getCurrentUser, updateCurrentUserPlan } from '../services/authService';
+import { preloadMessageNotificationSound } from '../services/messageSoundService';
+import { setCurrentUserPresence, subscribeToIncomingMessageSounds } from '../services/socialService';
 import { AppProfile, FriendRequestItem, FriendSummary, MatchRole, MembershipPlan, TopicTag, UiTheme } from '../types';
+import { getDeterministicAvatarId, resolveAvatarMeta } from '../utils/avatarResolver';
 
 function getLevelFromScore(score: number) {
   if (score >= 500) {
@@ -28,6 +33,10 @@ function getDailyAppreciationLimit(plan: MembershipPlan) {
   return plan === 'free' ? 2 : 5;
 }
 
+function getGenderDefaultAvatarId(gender: AppProfile['gender']) {
+  return gender === 'Erkek' ? 'headset' : 'heart';
+}
+
 type DailyAppreciationResult = {
   allowed: boolean;
   used: number;
@@ -36,6 +45,30 @@ type DailyAppreciationResult = {
 };
 
 type FriendRequestDraft = FriendSummary;
+
+type AppProfileAvatarSource =
+  | 'register-onboarding'
+  | 'current-user'
+  | 'restore-auth'
+  | 'avatar-selection'
+  | 'profile-edit'
+  | 'profile-info'
+  | 'set-plan'
+  | 'fallback'
+  | 'deterministic-fallback'
+  | 'defaultProfile'
+  | 'empty/null avatar patch'
+  | 'peer'
+  | 'peer-profile'
+  | 'friend'
+  | 'friend-profile'
+  | 'match'
+  | 'match-partner'
+  | 'voicecall';
+
+type UpdateProfileOptions = {
+  source?: AppProfileAvatarSource;
+};
 
 type AppContextValue = {
   profile: AppProfile;
@@ -52,7 +85,7 @@ type AppContextValue = {
   friends: FriendSummary[];
   countdownAlertsEnabled: boolean;
   uiTheme: UiTheme;
-  updateProfile: (patch: Partial<AppProfile>) => void;
+  updateProfile: (patch: Partial<AppProfile>, options?: UpdateProfileOptions) => void;
   updateUsername: (username: string) => void;
   setPlan: (plan: MembershipPlan) => Promise<void>;
   setAvatar: (avatarId: string) => void;
@@ -76,9 +109,24 @@ type AppContextValue = {
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
+const PRESENCE_HEARTBEAT_MS = 4 * 1000;
+const AVATAR_UPDATE_ALLOWED_SOURCES: AppProfileAvatarSource[] = [
+  'register-onboarding',
+  'current-user',
+  'restore-auth',
+  'avatar-selection',
+  'profile-edit',
+];
+
+function buildInitialProfile(): AppProfile {
+  return {
+    ...defaultProfile,
+    avatarId: '',
+  };
+}
 
 export function AppProvider({ children }: PropsWithChildren) {
-  const [profile, setProfile] = useState<AppProfile>(defaultProfile);
+  const [profile, setProfile] = useState<AppProfile>(buildInitialProfile);
   const [activeRole, setActiveRole] = useState<MatchRole>('derdim-var');
   const [activeTopic, setActiveTopic] = useState<TopicTag>(topics[0]);
   const [userScore, setUserScore] = useState(92);
@@ -89,11 +137,134 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [countdownAlertsEnabled, setCountdownAlertsEnabled] = useState(true);
   const [uiTheme, setUiTheme] = useState<UiTheme>('dark');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const userLevel = getLevelFromScore(userScore);
   const effectiveUsage = dailyAppreciationUsage.dateKey === getTodayKey() ? dailyAppreciationUsage.used : 0;
   const dailyAppreciationLimit = getDailyAppreciationLimit(profile.plan);
   const blockedUserIds = blockedUsers.map((user) => user.id);
   const pendingIncomingFriendRequests = friendRequests.filter((request) => request.direction === 'incoming' && request.status === 'pending');
+
+  useEffect(() => {
+    let mounted = true;
+
+    void getCurrentUser().then((result) => {
+      if (mounted) {
+        setCurrentUserId(result.data?.id ?? null);
+      }
+    });
+
+    void setCurrentUserPresence(true);
+
+    const heartbeat = setInterval(() => {
+      void setCurrentUserPresence(true);
+    }, PRESENCE_HEARTBEAT_MS);
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      void setCurrentUserPresence(nextState === 'active');
+    });
+
+    return () => {
+      mounted = false;
+      clearInterval(heartbeat);
+      subscription.remove();
+      void setCurrentUserPresence(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      return undefined;
+    }
+
+    preloadMessageNotificationSound();
+    const channel = subscribeToIncomingMessageSounds(currentUserId);
+
+    return () => {
+      if (channel) {
+        void channel.unsubscribe();
+      }
+    };
+  }, [currentUserId]);
+
+  function applyProfileAvatarUpdate(
+    current: AppProfile,
+    next: AppProfile,
+    input: {
+      source: AppProfileAvatarSource;
+      avatarId?: string | null;
+      gender?: AppProfile['gender'];
+      avatarPatchProvided: boolean;
+    },
+  ) {
+    const previousAvatarId = typeof current.avatarId === 'string' ? current.avatarId.trim() : '';
+    const fallbackGender = input.gender ?? next.gender ?? current.gender;
+    const attemptedAvatarId = typeof input.avatarId === 'string' ? input.avatarId.trim() : '';
+    const defaultAvatarId = getGenderDefaultAvatarId(fallbackGender);
+    const deterministicAvatarId = currentUserId ? getDeterministicAvatarId(currentUserId, fallbackGender) : '';
+    let preventedOverwrite = false;
+    let reason = 'avatar-updated';
+
+    if (!input.avatarPatchProvided) {
+      next.avatarId = previousAvatarId;
+      reason = 'preserved-existing-avatar-no-avatar-patch';
+    } else if (!attemptedAvatarId) {
+      next.avatarId = previousAvatarId;
+      preventedOverwrite = true;
+      reason = 'blocked-empty-avatar-patch';
+    } else if (!AVATAR_UPDATE_ALLOWED_SOURCES.includes(input.source)) {
+      next.avatarId = previousAvatarId;
+      preventedOverwrite = true;
+      reason = 'blocked-avatar-source';
+    } else {
+      const avatarMeta = resolveAvatarMeta(attemptedAvatarId, fallbackGender);
+      const resolvedAvatarId = avatarMeta.canonicalId;
+      const hasExistingAvatar = previousAvatarId.length > 0;
+      const isDeterministicFallback =
+        deterministicAvatarId.length > 0 &&
+        resolvedAvatarId === deterministicAvatarId &&
+        avatarMeta.fallbackUsed;
+      const isDefaultFallbackOverwrite =
+        hasExistingAvatar &&
+        previousAvatarId !== resolvedAvatarId &&
+        resolvedAvatarId === defaultAvatarId &&
+        avatarMeta.fallbackUsed;
+
+      if (isDeterministicFallback) {
+        next.avatarId = previousAvatarId;
+        preventedOverwrite = true;
+        reason = 'blocked-fallback-overwrite';
+      } else if (isDefaultFallbackOverwrite) {
+        next.avatarId = previousAvatarId;
+        preventedOverwrite = true;
+        reason = 'blocked-default-avatar-overwrite';
+      } else {
+        next.avatarId = resolvedAvatarId;
+      }
+    }
+
+    const finalAvatarId = typeof next.avatarId === 'string' ? next.avatarId.trim() : '';
+
+    if (__DEV__) {
+      logSafeDebug(
+        '[app-profile-avatar]',
+        `scope=[app-profile-avatar] currentUserId:${currentUserId ?? 'missing'} previousAvatarId:${previousAvatarId || 'empty'} attemptedAvatarId:${attemptedAvatarId || 'empty'} finalAvatarId:${finalAvatarId || 'empty'} source:${input.source} preventedOverwrite:${preventedOverwrite} reason:${reason}`,
+      );
+    }
+
+    return next;
+  }
+
+  function safePatchProfile(current: AppProfile, patch: Partial<AppProfile>, options?: UpdateProfileOptions) {
+    const avatarPatchProvided = Object.prototype.hasOwnProperty.call(patch, 'avatarId');
+    const next = { ...current, ...patch };
+
+    return applyProfileAvatarUpdate(current, next, {
+      source: options?.source ?? 'current-user',
+      avatarId: avatarPatchProvided ? patch.avatarId ?? null : undefined,
+      gender: patch.gender,
+      avatarPatchProvided,
+    });
+  }
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -111,16 +282,8 @@ export function AppProvider({ children }: PropsWithChildren) {
       friends,
       countdownAlertsEnabled,
       uiTheme,
-      updateProfile: (patch) => {
-        setProfile((current) => {
-          const next = { ...current, ...patch };
-
-          if (!patch.avatarId && patch.gender && getAvatarById(current.avatarId).gender !== patch.gender) {
-            next.avatarId = patch.gender === 'Kadın' ? 'f-1' : 'm-1';
-          }
-
-          return next;
-        });
+      updateProfile: (patch, options) => {
+        setProfile((current) => safePatchProfile(current, patch, options));
       },
       updateUsername: (username) => {
         setProfile((current) => ({
@@ -137,15 +300,19 @@ export function AppProvider({ children }: PropsWithChildren) {
           return;
         }
 
-        setProfile((current) => ({
-          ...current,
-          plan: result.data?.plan ?? 'free',
-          username: result.data?.username || current.username,
-          avatarId: result.data?.avatarId || current.avatarId,
-        }));
+        setProfile((current) =>
+          safePatchProfile(current, {
+            ...current,
+            plan: result.data?.plan ?? 'free',
+            username: result.data?.username || current.username,
+            avatarId: result.data?.avatarId ?? current.avatarId,
+          }, {
+            source: 'set-plan',
+          }),
+        );
       },
       setAvatar: (avatarId) => {
-        setProfile((current) => ({ ...current, avatarId }));
+        setProfile((current) => safePatchProfile(current, { avatarId }, { source: 'avatar-selection' }));
       },
       setAutoCallEnabled: (value) => {
         setProfile((current) => ({ ...current, autoCallEnabled: value }));
@@ -271,6 +438,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       activeTopic,
       blockedUserIds,
       countdownAlertsEnabled,
+      currentUserId,
       dailyAppreciationLimit,
       dailyAppreciationUsage,
       effectiveUsage,

@@ -2,16 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar } from '../components/Avatar';
 import { FormInput } from '../components/FormInput';
 import { GlassCard } from '../components/GlassCard';
 import { GradientButton } from '../components/GradientButton';
 import { NoticeModal } from '../components/NoticeModal';
 import { PremiumScreen } from '../components/PremiumScreen';
 import { ScreenHeader } from '../components/ScreenHeader';
+import { UserAvatar } from '../components/UserAvatar';
 import { colors, radius, spacing } from '../constants/theme';
 import { useAppState } from '../data/AppContext';
-import { badges, getAvatarById, receivedGifts } from '../data/mockData';
+import { badges, receivedGifts } from '../data/mockData';
 import { AppScreenProps } from '../navigation/types';
 import { deleteCurrentAccount, freezeCurrentAccount } from '../services/accountService';
 import { FriendRequestItem, MembershipPlan } from '../types';
@@ -64,13 +64,17 @@ function FriendRequestRow({
   onAccept: () => void;
   onReject: () => void;
 }) {
-  const avatar = getAvatarById(request.avatarId);
   const badge = getPlanBadge(request.plan);
 
   return (
     <View style={styles.requestRow}>
       <View style={styles.requestIdentity}>
-        <Avatar avatar={avatar} size={42} />
+        <UserAvatar
+          avatarId={request.avatarId}
+          avatarSourceType="friend-profile"
+          renderedUserId={request.id}
+          size={42}
+        />
         <View style={styles.requestCopy}>
           <Text numberOfLines={1} style={styles.requestName}>
             {request.username}
@@ -116,7 +120,6 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
   const [accountAction, setAccountAction] = useState<'freeze' | 'delete' | null>(null);
   const [accountError, setAccountError] = useState('');
   const [usernameNoticeVisible, setUsernameNoticeVisible] = useState(false);
-  const avatar = useMemo(() => getAvatarById(profile.avatarId), [profile.avatarId]);
   const remainingDays = useMemo(() => getRemainingDays(profile.lastUsernameChangeDate), [profile.lastUsernameChangeDate]);
   const canChangeUsername = remainingDays === 0;
 
@@ -155,7 +158,13 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
       <ScreenHeader onBack={() => navigation.goBack()} subtitle="Anonim profil ve güvenlik özeti" title="Profil" />
 
       <GlassCard style={styles.heroCard} toned="strong">
-        <Avatar avatar={avatar} size={84} />
+        <UserAvatar
+          avatarId={profile.avatarId}
+          avatarSourceType="current-profile"
+          fallbackGender={profile.gender}
+          renderedUserId={profile.username}
+          size={84}
+        />
         <View style={styles.heroCopy}>
           <Text style={styles.alias}>{profile.username}</Text>
           <Text style={styles.packageLabel}>{getPlanDisplayName(profile.plan)} plan aktif</Text>
@@ -181,6 +190,10 @@ export function ProfileScreen({ navigation }: AppScreenProps<'Profile'>) {
               <Text style={styles.scoreLabel}>İyilik Seviyesi</Text>
             </View>
           </View>
+          <Pressable onPress={() => navigation.navigate('AvatarSelection', { entry: 'profile', mode: 'profile-edit' })} style={styles.avatarEditButton}>
+            <Ionicons color={colors.text} name="sparkles" size={16} />
+            <Text style={styles.avatarEditButtonText}>Sembolü Değiştir</Text>
+          </Pressable>
         </View>
       </GlassCard>
 
@@ -395,6 +408,24 @@ const styles = StyleSheet.create({
   scoreRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  avatarEditButton: {
+    alignSelf: 'flex-start',
+    minHeight: 40,
+    marginTop: 4,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatarEditButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
   },
   scoreChip: {
     flex: 1,
